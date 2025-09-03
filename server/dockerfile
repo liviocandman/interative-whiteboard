@@ -1,0 +1,32 @@
+# Etapa 1: Build com Node + SWC
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copia apenas os arquivos necessários para instalar dependências
+COPY package.json package-lock.json ./
+RUN npm install
+
+# Copia o restante do código
+COPY . ./
+
+# Transpila TypeScript usando SWC 
+RUN npm run build
+
+# Etapa 2: Imagem final para produção
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copia apenas os arquivos necessários para rodar
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+
+# Define variáveis de ambiente padrão
+ENV NODE_ENV=production
+ENV PORT=4000
+
+EXPOSE 4000
+
+CMD ["node", "dist/index.js"]

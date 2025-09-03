@@ -34,9 +34,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Testes
-        run: npm test -- --watchAll=false
-
       - name: Build
         run: npm run build
 

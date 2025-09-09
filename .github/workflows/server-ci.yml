@@ -21,4 +21,4 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Build Docker Image (CI only)
-        run: docker build -t my-railway-app-ci
+        run: docker build -t my-railway-app-ci .

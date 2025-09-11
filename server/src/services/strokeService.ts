@@ -12,9 +12,9 @@ const STROKES_KEY = (roomId: string) => `room:${roomId}:strokes`;
 /** Publica no canal e armazena na lista Redis */
 export async function publishStroke(roomId: string, stroke: Stroke, socketId?: string | null, origin?: string): Promise<void> {
   const payload = JSON.stringify({ stroke, origin });
-  // 1) Push na lista (para persistência)
+
   await pubClient.rPush(STROKES_KEY(roomId), JSON.stringify(stroke));
-  // 2) Publica para subscribers
+
   await pubClient.publish(`room:${roomId}`, payload);
 }
 

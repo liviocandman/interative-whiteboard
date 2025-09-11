@@ -21,7 +21,7 @@ _export(exports, {
 });
 const _redis = require("redis");
 const pubClient = (0, _redis.createClient)({
-    url: process.env.REDIS_URL || "redis://localhost:6379"
+    url: process.env.REDIS_URL
 });
 const subClient = pubClient.duplicate();
 pubClient.on("error", (err)=>console.error("Redis Pub Error:", err));

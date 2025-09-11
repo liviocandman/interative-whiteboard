@@ -1,7 +1,7 @@
 import { createClient } from "redis";
 
 export const pubClient = createClient({
-  url: process.env.REDIS_URL || "redis://localhost:6379",
+  url: process.env.REDIS_URL,
 });
 
 export const subClient = pubClient.duplicate();

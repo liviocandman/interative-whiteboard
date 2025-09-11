@@ -14,9 +14,11 @@ function _interop_require_default(obj) {
         default: obj
     };
 }
-const PORT = 4000;
+// Use porta 0 para evitar conflitos
+const PORT = 0;
 let io;
 let httpServer;
+let realPort;
 (0, _vitest.describe)("Test multiple users in different rooms", ()=>{
     let clientA;
     let clientB;
@@ -32,18 +34,19 @@ let httpServer;
         await (0, _setupSocket.setupSocket)(io);
         await new Promise((resolve)=>{
             httpServer.listen(PORT, ()=>{
-                console.log(`Test server running on port ${PORT}`);
+                // @ts-ignore
+                realPort = httpServer.address().port;
+                clientA = (0, _socketioclient.io)(`http://localhost:${realPort}`);
+                clientB = (0, _socketioclient.io)(`http://localhost:${realPort}`);
                 resolve();
             });
         });
-        clientA = (0, _socketioclient.io)(`http://localhost:${PORT}`);
-        clientB = (0, _socketioclient.io)(`http://localhost:${PORT}`);
-    });
+    }, 20000); // timeout maior
     (0, _vitest.afterAll)(async ()=>{
-        clientA.disconnect();
-        clientB.disconnect();
-        io.close();
-        httpServer.close();
+        if (clientA) clientA.disconnect();
+        if (clientB) clientB.disconnect();
+        if (io) io.close();
+        if (httpServer) httpServer.close();
         await _redis.pubClient.quit();
         await _redis.subClient.quit();
     });

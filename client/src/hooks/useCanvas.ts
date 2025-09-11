@@ -1,9 +1,9 @@
 import { useState, useRef } from "react";
 
-export type Tool = "pen" | "eraser" | "bucket";
+
 
 interface UseCanvasOptions {
-  initialTool?: Tool;
+  initialTool?: string;
   initialColor?: string;
   initialLineWidth?: number;
   maxHistory?: number;
@@ -19,7 +19,7 @@ export function useCanvas(options: UseCanvasOptions = {}) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null); // Agora é interno
 
-  const [currentTool, setCurrentTool] = useState<Tool>(initialTool);
+  const [currentTool, setCurrentTool] = useState<string>(initialTool);
   const [strokeColor, setStrokeColor] = useState(initialColor);
   const [lineWidth, setLineWidth] = useState(initialLineWidth);
 
@@ -43,8 +43,6 @@ export function useCanvas(options: UseCanvasOptions = {}) {
     }
   };
 
-  //Undo and Redo functions to save the current state before applying the undo/redo action.
-  // They push the current state to the redo stack before applying the last state from the undo stack. If the undo stack is empty, they do nothing.
   const undo = () => {
     if (!canvasRef.current || undoStack.current.length === 0) return;
     const ctx = canvasRef.current.getContext("2d");
@@ -67,7 +65,6 @@ export function useCanvas(options: UseCanvasOptions = {}) {
     }
   };
 
-  //onMouseDown starts the drawing process, saving the current state.
   const onMouseDown = (
     e: React.MouseEvent<HTMLCanvasElement>,
   ) => {
@@ -76,18 +73,15 @@ export function useCanvas(options: UseCanvasOptions = {}) {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
 
-    // Configure the stroke style and size based on the current tool.
     ctx.strokeStyle = currentTool === "eraser" ? "#ffffff" : strokeColor;
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
     ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-    
-    // If the current tool is an eraser, set "destination-out". The existing content is kept where it doesn't overlap the new shape.
+
     ctx.globalCompositeOperation =
       currentTool === "eraser" ? "destination-out" : "source-over";
   };
 
-  // onMouseMove continues the drawing process if isDrawing is true.
   const onMouseMove = (
     e: React.MouseEvent<HTMLCanvasElement>,
   ) => {
@@ -98,7 +92,6 @@ export function useCanvas(options: UseCanvasOptions = {}) {
     ctx.stroke();
   };
 
-  // onMouseUp stops the drawing process and resets the composite operation.
   const onMouseUp = () => {
     isDrawingRef.current = false;
     const ctx = canvasRef.current?.getContext("2d");

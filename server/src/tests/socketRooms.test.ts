@@ -6,13 +6,15 @@ import { Server } from "socket.io";
 import { initRedis, pubClient, subClient } from "../config/redis";
 import { setupSocket } from "../socket/setupSocket";
 
-const PORT = 4000;
+// Use porta 0 para evitar conflitos
+const PORT = 0;
 let io: Server;
 let httpServer: ReturnType<typeof createServer>;
+let realPort: number;
 
 describe("Test multiple users in different rooms", () => {
-  let clientA: Socket;
-  let clientB: Socket;
+  let clientA: Socket | undefined;
+  let clientB: Socket | undefined;
 
   beforeAll(async () => {
     await initRedis();
@@ -25,20 +27,21 @@ describe("Test multiple users in different rooms", () => {
 
     await new Promise<void>((resolve) => {
       httpServer.listen(PORT, () => {
-        console.log(`Test server running on port ${PORT}`);
+        // @ts-ignore
+        realPort = httpServer.address().port;
+        clientA = Client(`http://localhost:${realPort}`);
+        clientB = Client(`http://localhost:${realPort}`);
         resolve();
       });
     });
-
-    clientA = Client(`http://localhost:${PORT}`);
-    clientB = Client(`http://localhost:${PORT}`);
-  });
+  }, 20000); // timeout maior
 
   afterAll(async () => {
-    clientA.disconnect();
-    clientB.disconnect();
-    io.close();
-    httpServer.close();
+    if (clientA) clientA.disconnect();
+    if (clientB) clientB.disconnect();
+    if (io) io.close();
+    if (httpServer) httpServer.close();
+
     await pubClient.quit();
     await subClient.quit();
   });
@@ -50,19 +53,19 @@ describe("Test multiple users in different rooms", () => {
     let receivedA = false;
     let receivedB = false;
 
-    clientA.emit("joinRoom", roomA);
-    clientB.emit("joinRoom", roomB);
+    clientA!.emit("joinRoom", roomA);
+    clientB!.emit("joinRoom", roomB);
 
-    clientA.on("drawing", () => {
+    clientA!.on("drawing", () => {
       receivedA = true;
     });
 
-    clientB.on("drawing", () => {
+    clientB!.on("drawing", () => {
       receivedB = true;
     });
 
     // User A sends a drawing event
-    clientA.emit("drawing", { x: 10, y: 20 });
+    clientA!.emit("drawing", { x: 10, y: 20 });
 
     // Aguarde um pouco para os eventos propagarem
     await new Promise((res) => setTimeout(res, 400));

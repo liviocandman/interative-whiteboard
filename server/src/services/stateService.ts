@@ -1,6 +1,6 @@
 import { pubClient } from "../config/redis";
 
-export async function saveCanvasState(roomId: string, state: any, ttlSeconds = 3600) {
+export async function saveCanvasState(roomId: string, state: string, ttlSeconds = 3600) {
   await pubClient.set(
     `room:${roomId}:state`,
     JSON.stringify(state),

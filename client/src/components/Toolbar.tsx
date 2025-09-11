@@ -1,25 +1,44 @@
 import ColorPicker from "./ColorPicker";
 import StrokeWidthSlider from "./StrokeWidthSlider";
-import { useCanvasContext } from "../hooks/useCanvasContext";
+import type { Tool } from "../hooks/useWhiteboard";
 
-const tools = ["pen", "eraser", "bucket"] as const;
+interface ToolbarProps {
+  currentTool: Tool;
+  onToolChange: (tool: Tool) => void;
+  strokeColor: string;
+  onColorChange: (color: string) => void;
+  lineWidth: number;
+  onLineWidthChange: (width: number) => void;
+}
 
-export default function Toolbar() {
-  const { currentTool, setCurrentTool } = useCanvasContext();
+const TOOL_OPTIONS: { id: Tool; label: string }[] = [
+  { id: "pen", label: "✏️ Pen" },
+  { id: "eraser", label: "🗑 Eraser" },
+  { id: "bucket", label: "🩸 Fill" },
+];
 
+export default function Toolbar({
+  currentTool,
+  onToolChange,
+  strokeColor,
+  onColorChange,
+  lineWidth,
+  onLineWidthChange,
+}: ToolbarProps) {
   return (
     <div style={{ display: "flex", gap: "1rem", padding: "0.5rem", background: "#eee" }}>
-      {tools.map((tool) => (
+      {TOOL_OPTIONS.map(({ id, label }) => (
         <button
-          key={tool}
-          onClick={() => setCurrentTool(tool)}
-          className={currentTool === tool ? "active" : ""}
+          key={id}
+          onClick={() => onToolChange(id)}
+          className={currentTool === id ? "active" : ""}
+          aria-pressed={currentTool === id}
         >
-          {tool}
+          {label}
         </button>
       ))}
-      <ColorPicker />
-      <StrokeWidthSlider />
+      <ColorPicker value={strokeColor} onChange={onColorChange} />
+      <StrokeWidthSlider value={lineWidth} onChange={onLineWidthChange} />
     </div>
   );
 }

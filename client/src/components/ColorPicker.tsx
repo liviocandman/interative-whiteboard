@@ -1,12 +1,18 @@
-import { useCanvasContext } from "../hooks/useCanvasContext";
+import React from "react";
 
-export default function ColorPicker() {
-  const { strokeColor, setStrokeColor } = useCanvasContext();
+interface ColorPickerProps {
+  value: string;
+  onChange: (color: string) => void;
+}
+
+export default function ColorPicker({ value, onChange }: ColorPickerProps) {
   return (
     <input
       type="color"
-      value={strokeColor}
-      onChange={(e) => setStrokeColor(e.target.value)}
+      value={value}
+      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+        onChange(e.target.value)
+      }
     />
   );
 }

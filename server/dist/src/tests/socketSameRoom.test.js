@@ -44,6 +44,7 @@ let httpServer;
         clientB.disconnect();
         io.close();
         httpServer.close();
+        await new Promise((res)=>setTimeout(res, 200));
         await _redis.pubClient.quit();
         await _redis.subClient.quit();
     });

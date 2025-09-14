@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import { initRedis } from "./config/redis";
 import { setupSocket } from "./socket/setupSocket";
 import healthRouter from "./routes/rooms";
+import { setupInactivityWorker } from "./socket/setupInactivityWorker";
 
 dotenv.config();
 
@@ -20,11 +21,13 @@ async function startServer() {
 
   app.use(cors());
   app.use(express.json());
-  app.use("/health", healthRouter);
+  app.use("/", healthRouter);
 
   await setupSocket(io);
 
-  const PORT = process.env.PORT || 4000;
+  await setupInactivityWorker(io);
+
+  const PORT = process.env.PORT;
   server.listen(PORT, () => {
     console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
   });

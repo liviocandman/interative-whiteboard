@@ -6,47 +6,72 @@ function isRedisOpen(client: typeof pubClient) {
   return !!client && (client as any).isOpen === true;
 }
 
-/**
- * Cria metadado da sala (chave string) com TTL para indicar existência.
- * Não manipula o set de usuários diretamente — o set é criado quando um usuário entra (SADD).
- */
 export async function createRoom(roomId: string, ttlSeconds = DEFAULT_TTL_SECONDS): Promise<void> {
   if (!roomId) throw new Error("createRoom: roomId inválido");
   if (!isRedisOpen(pubClient)) return;
 
   const metaKey = `room:${roomId}:meta`;
-  // cria uma chave string com TTL; evita criar set com placeholder
   await pubClient.set(metaKey, "1", { EX: ttlSeconds });
 }
-/**
- * Adiciona usuário ao set de usuários da sala e retorna o novo count.
- */
+
 export async function addUserToRoom(roomId: string, userId: string): Promise<number> {
   if (!roomId) throw new Error("addUserToRoom: roomId inválido");
   if (!userId) throw new Error("addUserToRoom: userId inválido");
 
   const usersKey = `room:${roomId}:users`;
-  await pubClient.sAdd(usersKey, userId);
-  const count = await pubClient.sCard(usersKey);
-  return typeof count === "number" ? count : Number(count);
+  try {
+    await pubClient.sAdd(usersKey, userId);
+    const count = await pubClient.sCard(usersKey);
+    return typeof count === "number" ? count : Number(count);
+  } catch (err) {
+    console.error("addUserToRoom erro:", err);
+    throw err;
+  }
 }
 
-/**
- * Remove o usuário do set e retorna o novo count (0 se não existir).
- */
+export async function getRoomUsersCount(roomId: string): Promise<number> {
+  if (!roomId) throw new Error("getRoomUsersCount: roomId inválido");
+  const usersKey = `room:${roomId}:users`;
+  try {
+    const count = await pubClient.sCard(usersKey);
+    return typeof count === "number" ? count : Number(count);
+  } catch (err) {
+    console.error("getRoomUsersCount erro:", err);
+    return 0;
+  }
+}
+
 export async function removeUserFromRoom(roomId: string, userId: string): Promise<number> {
   if (!roomId) throw new Error("removeUserFromRoom: roomId inválido");
   if (!userId) throw new Error("removeUserFromRoom: userId inválido");
 
   const usersKey = `room:${roomId}:users`;
-  await pubClient.sRem(usersKey, userId);
-  const count = await pubClient.sCard(usersKey);
-  return typeof count === "number" ? count : Number(count);
+
+  // Lua script: remove o membro e retorna o novo SCARD
+  const lua = `
+    redis.call("SREM", KEYS[1], ARGV[1])
+    return redis.call("SCARD", KEYS[1])
+  `;
+
+  try {
+    // node-redis v4: client.eval(script, { keys: [...], arguments: [...] })
+    const res = await (pubClient as any).eval(lua, { keys: [usersKey], arguments: [userId] });
+    const count = Number(res ?? 0);
+    return Number.isFinite(count) ? count : 0;
+  } catch (err) {
+    console.error("removeUserFromRoom (eval) erro:", err);
+    // fallback seguro: tentar remover e ler count separadamente
+    try {
+      await pubClient.sRem(usersKey, userId);
+      const count = await pubClient.sCard(usersKey);
+      return typeof count === "number" ? count : Number(count);
+    } catch (e) {
+      console.error("removeUserFromRoom (fallback) erro:", e);
+      throw e;
+    }
+  }
 }
 
-/**
- * Apaga todos os keys relacionados à sala (users set, state e meta).
- */
 export async function deleteRoom(roomId: string): Promise<void> {
   if (!roomId) throw new Error("deleteRoom: roomId inválido");
   if (!isRedisOpen(pubClient)) return;
@@ -56,18 +81,14 @@ export async function deleteRoom(roomId: string): Promise<void> {
     `room:${roomId}:state`,
     `room:${roomId}:meta`,
   ];
-  
-  for (const key of keys) {
-    await pubClient.del(key);
+
+  try {
+    // pubClient.del aceita múltiplas chaves
+    await pubClient.del(keys);
+  } catch (err) {
+    console.error("deleteRoom erro:", err);
+    throw err;
   }
 }
 
-/**
- * Retorna o número de usuários na sala (sempre number; 0 se key não existir).
- */
-export async function getRoomUsersCount(roomId: string): Promise<number> {
-  if (!roomId) throw new Error("getRoomUsersCount: roomId inválido");
-  const usersKey = `room:${roomId}:users`;
-  const count = await pubClient.sCard(usersKey);
-  return typeof count === "number" ? count : Number(count);
-}
+

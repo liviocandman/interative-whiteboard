@@ -1,5 +1,9 @@
+// src/socket/setupSocket.ts
 import { Server } from "socket.io";
-import { pubClient, subClient } from "../config/redis";
+import {
+  pubClient as redisPublisher,
+  subClient as redisSubscriber,
+} from "../config/redis";
 import {
   saveCanvasState,
   getCanvasState,
@@ -8,172 +12,280 @@ import {
 import {
   addUserToRoom,
   removeUserFromRoom,
-  deleteRoom,
+  getRoomUsersCount,
 } from "../services/roomService";
+import { scheduleOrCancelRoomCleanup } from "../services/cleanupService";
 import {
   Stroke,
-  getRoomStrokes,
-  publishStroke,
-  deleteRoomStrokes,
+  fetchRoomStrokes,
+  saveAndBroadcastStroke,
+  clearRoomStrokes,
 } from "../services/strokeService";
+import {
+  markUserActive,
+  cleanupUserData,
+  getUserRoom,
+} from "../services/userActivityService";
 
-const REDIS_ROOM_PREFIX = "room:";
+const ROOM_KEY_PREFIX = "room:";
+const REDIS_PUBSUB_PATTERN = `${ROOM_KEY_PREFIX}*`;
 
+/**
+ * Setup principal de Socket.IO + Redis Pub/Sub
+ */
 export async function setupSocket(io: Server) {
-  // Subscriber global para strokes de outras instâncias
+  // 1) inscrição no Redis Pub/Sub (pattern)
   try {
-    await subClient.pSubscribe(`${REDIS_ROOM_PREFIX}*`, (rawMessage, channel) => {
-      try {
-        const roomId = channel.substring(REDIS_ROOM_PREFIX.length);
-        if (!roomId) return;
-
-        const { stroke, origin }: { stroke: Stroke; origin?: string } = JSON.parse(rawMessage);
-        io.in(roomId).except(origin ?? []).emit("drawing", stroke);
-      } catch (err) {
-        console.error("Redis pSubscribe handler error:", err);
-      }
-    });
-    console.log("🔔 Redis pSubscribe registrado em pattern 'room:*'");
+    // pSubscribe espera (pattern, (message, channel) => void)
+    await redisSubscriber.pSubscribe(REDIS_PUBSUB_PATTERN, createRedisPubSubHandler(io));
+    console.info(`[socketService] Subscreveu Pub/Sub pattern='${REDIS_PUBSUB_PATTERN}'`);
   } catch (err) {
-    console.error("Falha ao registrar pSubscribe no Redis:", err);
+    console.error("[socketService] Falha ao subscrever Pub/Sub:", err);
   }
 
-  // Cancela inscrição no Redis ao encerrar processo
+  // 2) cleanup no SIGINT
   process.once("SIGINT", async () => {
     try {
-      await subClient.pUnsubscribe(`${REDIS_ROOM_PREFIX}*`);
-      console.log("🔕 Redis pUnsubscribe executado");
+      await redisSubscriber.pUnsubscribe(REDIS_PUBSUB_PATTERN);
+      console.info("[socketService] pUnsubscribe executado, saindo");
       process.exit(0);
-    } catch {
+    } catch (e) {
+      console.warn("[socketService] Erro no pUnsubscribe, forçando exit:", e);
       process.exit(1);
     }
   });
 
-  // Limpa estado, metadados e strokes quando sala fica vazia
-  async function cleanupRoomWhenEmpty(roomId: string, count: number) {
-    if (count !== 0) {
-      console.log(`Sala ${roomId} com ${count} usuário(s) — mantida`);
-      return;
-    }
-    console.log(`🧹 Sala ${roomId} vazia — apagando estado e removendo sala`);
-    await Promise.all([
-      deleteCanvasState(roomId),
-      deleteRoom(roomId),
-      deleteRoomStrokes(roomId),
-    ]).catch((err) => console.error("Erro no cleanup:", err));
-  }
+  // 3) handler de conexões
+  io.on("connection", (clientSocket) => {
+    console.info(`[socketService] Cliente conectado: ${clientSocket.id}`);
+    let currentRoomId: string | null = null;
 
-  io.on("connection", (socket) => {
-    console.log(`🟢 Socket conectado: ${socket.id}`);
-    let joinedRoom: string | null = null;
-
-    socket.on("joinRoom", async (roomId: string, ack?: (err?: string) => void) => {
-      if (!roomId) {
-        ack?.("roomId inválido");
-        return;
+    // renova TTL (marca atividade)
+    async function refreshUserActivity() {
+      if (!currentRoomId) return;
+      try {
+        await markUserActive(clientSocket.id, currentRoomId);
+      } catch (err) {
+        console.error(`[socketService] markUserActive erro (socket=${clientSocket.id}):`, err);
       }
+    }
 
-      // Sai da sala anterior se necessário
-      if (joinedRoom && joinedRoom !== roomId) {
+    // registra handlers
+    clientSocket.on("joinRoom", createJoinRoomHandler());
+    clientSocket.on("drawing", createDrawingHandler());
+    clientSocket.on("saveState", createSaveStateHandler());
+    clientSocket.on("leaveRoom", createLeaveRoomHandler());
+    clientSocket.on("resetBoard", createResetBoardHandler());
+    clientSocket.on("disconnect", handleClientDisconnect);
+
+    /* ---------------------- HANDLERS FACTORY ---------------------- */
+
+    function createJoinRoomHandler() {
+      return async (roomId: string, ack?: (err?: string) => void) => {
+        if (!roomId) {
+          return ack?.("roomId inválido");
+        }
+
+        // sair da sala anterior se necessário
+        if (currentRoomId && currentRoomId !== roomId) {
+          try {
+            await leaveRoom(currentRoomId);
+          } catch (e) {
+            console.warn(`[socketService] erro ao sair sala anterior (socket=${clientSocket.id}):`, e);
+          }
+        }
+
+        // adicionar ao room service e socket.io
         try {
-          const prevCount = await removeUserFromRoom(joinedRoom, socket.id);
-          socket.leave(joinedRoom);
-          await cleanupRoomWhenEmpty(joinedRoom, prevCount);
+          const updatedCount = await addUserToRoom(roomId, clientSocket.id);
+          await clientSocket.join(roomId);
+          currentRoomId = roomId;
+
+          // cancel/ schedule cleanup
+          scheduleOrCancelRoomCleanup(roomId, updatedCount);
+
+          // marca atividade no Redis
+          await markUserActive(clientSocket.id, roomId);
+
+          // log dos sockets na sala (útil para debug)
+          try {
+            const socketsInRoom = await io.in(roomId).allSockets(); // Set<string>
+            console.debug(`[socketService] sockets em ${roomId}:`, Array.from(socketsInRoom));
+          } catch {
+            // non-blocking
+          }
+
+          console.info(`[socketService] socket=${clientSocket.id} entrou na sala=${roomId} (count=${updatedCount})`);
+        } catch (err: any) {
+          console.error(`[socketService] addUserToRoom erro:`, err);
+          return ack?.(err.message || "Falha ao registrar usuário");
+        }
+
+        // Envia estado inicial (snapshot + strokes persistidos)
+        try {
+          const [canvasSnapshot, persistedStrokes] = await Promise.all([
+            getCanvasState(roomId),
+            fetchRoomStrokes(roomId),
+          ]);
+
+          clientSocket.emit("initialState", {
+            snapshot: canvasSnapshot ?? null,
+            strokes: persistedStrokes ?? [],
+          });
+
+          ack?.();
+        } catch (err: any) {
+          console.error(`[socketService] erro ao obter initialState (room=${roomId}):`, err);
+          clientSocket.emit("initialState", { snapshot: null, strokes: [] });
+          ack?.(err.message || "Erro ao recuperar estado inicial");
+        }
+      };
+    }
+
+    function createDrawingHandler() {
+      return async (stroke: Stroke) => {
+        await refreshUserActivity();
+        if (!currentRoomId) return;
+
+        try {
+          // Persiste e publica; recebe info de debug
+          const res = await saveAndBroadcastStroke(currentRoomId, stroke, clientSocket.id);
+
+          // Se publishCount === 0, não havia subscriber no Pub/Sub:
+          // emitir localmente para sockets desta instância (evita perda).
+          if (!res.publishCount || res.publishCount === 0) {
+            try {
+              clientSocket.to(currentRoomId).emit("drawing", stroke);
+              console.warn(`[socketService] Pub/Sub sem subscribers (room=${currentRoomId}). Emissão local realizada. origin=${clientSocket.id}`);
+            } catch (emitErr) {
+              console.error("[socketService] erro ao emitir desenho localmente:", emitErr);
+            }
+          }
         } catch (err) {
-          console.error("Erro ao sair de sala anterior:", err);
-        } finally {
-          joinedRoom = null;
+          console.error(`[socketService] saveAndBroadcastStroke erro (socket=${clientSocket.id}):`, err);
+          clientSocket.emit("error", { event: "drawing", message: (err as Error).message });
+        }
+      };
+    }
+
+    function createSaveStateHandler() {
+      return async (serializedCanvas: string, ack?: (err?: string) => void) => {
+        await refreshUserActivity();
+        if (!currentRoomId) return ack?.("sem sala");
+        try {
+          await saveCanvasState(currentRoomId, serializedCanvas);
+          ack?.();
+        } catch (err: any) {
+          console.error(`[socketService] saveCanvasState erro (socket=${clientSocket.id}):`, err);
+          ack?.(err.message || "Falha ao salvar estado");
+        }
+      };
+    }
+
+    function createLeaveRoomHandler() {
+      return async (roomToLeave?: string, ack?: (err?: string) => void) => {
+        await refreshUserActivity();
+        const targetRoom = roomToLeave ?? currentRoomId;
+        if (!targetRoom) return ack?.("não está em sala");
+
+        try {
+          const remainingUsers = await leaveRoom(targetRoom);
+          ack?.();
+          scheduleOrCancelRoomCleanup(targetRoom, remainingUsers);
+        } catch (err: any) {
+          console.error(`[socketService] leaveRoom erro (socket=${clientSocket.id}):`, err);
+          ack?.(err.message || "Falha ao sair da sala");
+        }
+      };
+    }
+
+    function createResetBoardHandler() {
+      return async (ack?: (err?: string) => void) => {
+        await refreshUserActivity();
+        if (!currentRoomId) return ack?.("não está em sala");
+
+        try {
+          await Promise.all([deleteCanvasState(currentRoomId), clearRoomStrokes(currentRoomId)]);
+          // publica reset com campo 'origin' consistente
+          await redisPublisher.publish(`${ROOM_KEY_PREFIX}${currentRoomId}`, JSON.stringify({ reset: true, origin: clientSocket.id }));
+          clientSocket.emit("clearBoard");
+          ack?.();
+        } catch (err: any) {
+          console.error(`[socketService] resetBoard erro (socket=${clientSocket.id}):`, err);
+          ack?.(err.message || "Falha ao resetar o quadro");
+        }
+      };
+    }
+
+    /* ---------------------- HELPERS ---------------------- */
+
+    async function leaveRoom(roomId: string): Promise<number> {
+      try {
+        const updatedCount = await removeUserFromRoom(roomId, clientSocket.id);
+        clientSocket.leave(roomId);
+
+        if (currentRoomId === roomId) {
+          currentRoomId = null;
+          await cleanupUserData(clientSocket.id).catch((e) => console.warn("[socketService] cleanupUserData erro:", e));
+        }
+
+        console.info(`[socketService] socket=${clientSocket.id} saiu da sala=${roomId} (count=${updatedCount})`);
+        return updatedCount;
+      } catch (err) {
+        console.error(`[socketService] leaveRoom erro (socket=${clientSocket.id}):`, err);
+        throw err;
+      }
+    }
+
+    async function handleClientDisconnect(reason: string) {
+      console.info(`[socketService] socket=${clientSocket.id} desconectou: ${reason}`);
+      if (currentRoomId) {
+        try {
+          const remaining = await leaveRoom(currentRoomId);
+          scheduleOrCancelRoomCleanup(currentRoomId, remaining);
+        } catch (err) {
+          console.warn("[socketService] erro no leaveRoom durante disconnect:", err);
         }
       }
-
-      // Registra no serviço e entra na sala
-      try {
-        const newCount = await addUserToRoom(roomId, socket.id);
-        socket.join(roomId);
-        joinedRoom = roomId;
-        console.log(`📌 ${socket.id} entrou na sala ${roomId} (${newCount} usuários)`);
-      } catch (err: any) {
-        console.error("Falha addUserToRoom:", err);
-        ack?.(err.message || "Erro ao registrar usuário");
-        return;
-      }
-
-      // Envia estado inicial consolidado
-      try {
-        const [snapshot, strokes] = await Promise.all([
-          getCanvasState(roomId),
-          getRoomStrokes(roomId),
-        ]);
-        socket.emit("initialState", {
-          snapshot: snapshot ?? null,
-          strokes,
-        });
-        ack?.();
-      } catch (err: any) {
-        console.error("Falha ao recuperar estado inicial:", err);
-        socket.emit("initialState", { snapshot: null, strokes: [] });
-        ack?.(err.message || "Falha ao recuperar estado inicial");
-      }
-    });
-
-    socket.on("drawing", async (stroke: Stroke) => {
-      if (!joinedRoom) return;
-      try {
-        await publishStroke(joinedRoom, { ...stroke }, socket.id);
-      } catch (err) {
-        console.error("Erro ao publicar stroke:", err);
-        socket.emit("error", { event: "drawing", message: (err as Error).message });
-      }
-    });
-
-    socket.on("saveState", async (canvasState: string, ack?: (err?: string) => void) => {
-      if (!joinedRoom) {
-        ack?.("sem sala");
-        return;
-      }
-      try {
-        await saveCanvasState(joinedRoom, canvasState);
-        ack?.();
-      } catch (err: any) {
-        console.error("Erro saveCanvasState:", err);
-        ack?.(err.message || "Falha ao salvar estado");
-      }
-    });
-
-    socket.on("leaveRoom", async (roomId?: string, ack?: (err?: string) => void) => {
-      const target = roomId ?? joinedRoom;
-      if (!target) {
-        ack?.("não está em sala");
-        return;
-      }
-      try {
-        const newCount = await removeUserFromRoom(target, socket.id);
-        socket.leave(target);
-        if (joinedRoom === target) joinedRoom = null;
-        console.log(`🚪 ${socket.id} saiu da sala ${target} (${newCount} usuários)`);
-        await cleanupRoomWhenEmpty(target, newCount);
-        ack?.();
-      } catch (err: any) {
-        console.error("Erro leaveRoom:", err);
-        ack?.(err.message || "Falha ao sair da sala");
-      }
-    });
-
-    socket.on("disconnect", async (reason) => {
-      if (!joinedRoom) {
-        console.log(`🔴 ${socket.id} desconectou (sem sala) — razão: ${reason}`);
-        return;
-      }
-      const roomToClean = joinedRoom;
-      joinedRoom = null;
-      try {
-        const newCount = await removeUserFromRoom(roomToClean, socket.id);
-        socket.leave(roomToClean);
-        console.log(`🔴 ${socket.id} desconectou de ${roomToClean} (${newCount} usuários)`);
-        await cleanupRoomWhenEmpty(roomToClean, newCount);
-      } catch (err) {
-        console.error("Erro no handler disconnect:", err);
-      }
-    });
+      await cleanupUserData(clientSocket.id).catch((e) => console.warn("[socketService] cleanupUserData no disconnect erro:", e));
+    }
   });
+}
+
+/* ---------------------- Redis Pub/Sub handler (tolerante + logs) ---------------------- */
+
+function createRedisPubSubHandler(io: Server) {
+  return (pubSubMessage: string, channel: string) => {
+    try {
+      console.debug(`[socketService][pubsub] msg on channel=${channel}: ${pubSubMessage}`);
+
+      const roomId = channel.replace(ROOM_KEY_PREFIX, "");
+      if (!roomId) return;
+
+      const parsed = JSON.parse(pubSubMessage) as {
+        reset?: boolean;
+        stroke?: Stroke;
+        origin?: string | null;
+        originSocketId?: string | null;
+      };
+
+      // aceitar ambos os formatos (compatibilidade)
+      const origin = parsed.origin ?? parsed.originSocketId ?? null;
+
+      if (parsed.reset) {
+        const target = origin ? io.in(roomId).except(origin) : io.in(roomId);
+        target.emit("clearBoard");
+        console.debug(`[socketService][pubsub] emitted clearBoard room=${roomId} origin=${origin ?? "null"}`);
+        return;
+      }
+
+      if (parsed.stroke) {
+        const target = origin ? io.in(roomId).except(origin) : io.in(roomId);
+        target.emit("drawing", parsed.stroke);
+        console.debug(`[socketService][pubsub] emitted drawing room=${roomId} origin=${origin ?? "null"}`);
+      }
+    } catch (err) {
+      console.error("[socketService] Erro no Pub/Sub handler:", err);
+    }
+  };
 }

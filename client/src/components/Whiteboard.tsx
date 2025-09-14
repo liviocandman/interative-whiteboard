@@ -1,54 +1,26 @@
-import { useRef, useEffect } from "react";
-import type { Tool } from "../hooks/useWhiteboard";
-import { useWhiteboard } from "../hooks/useWhiteboard";
-
-interface WhiteboardProps {
-  roomId: string;
-  currentTool: Tool;
-  strokeColor: string;
-  lineWidth: number;
+import React, { forwardRef } from "react";
+export interface WhiteboardProps {
+  onPointerDown: React.PointerEventHandler<HTMLCanvasElement>;
+  onPointerMove: React.PointerEventHandler<HTMLCanvasElement>;
+  onPointerUp: React.PointerEventHandler<HTMLCanvasElement>;
 }
 
-export default function Whiteboard({
-  roomId,
-  currentTool,
-  strokeColor,
-  lineWidth,
-}: WhiteboardProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const { onMouseDown, onMouseMove, onMouseUp } = useWhiteboard({
-    roomId,
-    canvasRef,
-    currentTool,
-    strokeColor,
-    lineWidth,
-  });
-
-  // Configuração inicial do canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight - 80;
-      const ctx = canvas.getContext("2d");
-      if (ctx) ctx.lineCap = "round";
-    }
-  }, []);
-
-  return (
+const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
+  ({ onPointerDown, onPointerMove, onPointerUp }, ref) => (
     <canvas
-      ref={canvasRef}
+      ref={ref}
       style={{
-        cursor: currentTool === "pen" ? "crosshair" : "pointer",
+        touchAction: "none",
         backgroundColor: "#fff",
         border: "1px solid #ccc",
       }}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerUp}
       aria-label="Drawing Canvas"
     />
-  );
-}
+  )
+);
+
+export default Whiteboard;

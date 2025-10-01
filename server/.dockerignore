@@ -1,5 +1,10 @@
 node_modules
-src
-*.ts
-*.tsx
+dist
+.git
+.gitignore
+.vscode
 .env
+.env.*
+npm-debug.log
+Dockerfile
+docker-compose.override.yml

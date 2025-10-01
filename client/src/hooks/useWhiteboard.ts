@@ -1,222 +1,217 @@
-import { useEffect, useRef, useCallback } from "react";
-import { socket } from "../services/socket";
+// client/src/hooks/useWhiteboard.ts
+import { useRef, useCallback, useEffect } from 'react';
+import { socket } from '../services/socket';
+import { canvasService } from '../services/canvasService';
+import { drawingService } from '../services/drawingService';
+import { throttle } from '../utils/throttle';
+import type { Stroke, Tool, Point, CanvasState } from '../types';
 
-export type Tool = "pen" | "eraser" | "bucket";
-export interface Stroke {
-  from: { x: number; y: number };
-  to: { x: number; y: number };
+interface UseWhiteboardProps {
+  roomId: string;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  tool: Tool;
   color: string;
   lineWidth: number;
-  tool: Tool;
 }
 
-interface UseWhiteboardProps {
-  roomId: string;
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  currentTool: Tool;
-  strokeColor: string;
-  lineWidth: number;
-}
-interface UseWhiteboardProps {
-  roomId: string;
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  currentTool: Tool;
-  strokeColor: string;
-  lineWidth: number;
+interface UseWhiteboardReturn {
+  onPointerDown: (e: React.PointerEvent<HTMLCanvasElement>) => void;
+  onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void;
+  onPointerUp: () => void;
+  resetBoard: (callback?: (error?: string) => void) => void;
+  isConnected: boolean;
 }
 
 export function useWhiteboard({
   roomId,
   canvasRef,
-  currentTool,
-  strokeColor,
+  tool,
+  color,
   lineWidth,
-}: UseWhiteboardProps) {
-  const strokesRef = useRef<Stroke[]>([]);
-  const snapshotRef = useRef<string | null>(null);
+}: UseWhiteboardProps): UseWhiteboardReturn {
+  const isDrawing = useRef(false);
+  const lastPoint = useRef<Point | null>(null);
+  const isConnected = useRef(false);
 
-  const drawing = useRef(false);
-  const lastPoint = useRef<{ x: number; y: number } | null>(null);
-
-  // throttle via requestAnimationFrame
-  const rafScheduled = useRef(false);
-  const latestEvent = useRef<React.PointerEvent<HTMLCanvasElement> | null>(null);
-
-  // Aplica um stroke no canvas, sem salva-lo
-  const applyStroke = useCallback(
-    (stroke: Stroke) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.save();
-      ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = stroke.lineWidth;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.globalCompositeOperation =
-        stroke.tool === "eraser" ? "destination-out" : "source-over";
-      ctx.beginPath();
-      ctx.moveTo(stroke.from.x, stroke.from.y);
-      ctx.lineTo(stroke.to.x, stroke.to.y);
-      ctx.stroke();
-      ctx.restore();
-    },
-    [canvasRef]
+  // Throttled drawing para performance - define o tipo explicitamente
+  const throttledDraw = useRef(
+    throttle((stroke: Stroke): void => {
+      socket.emit('drawing', stroke);
+    }, 16) // ~60fps
   );
 
-  // Envia stroke ao servidor
-  const sendStroke = useCallback(
-    (stroke: Stroke) => {
-      socket.emit("drawing", stroke);
-    },
-    []
-  );
+  // Aplica stroke no canvas local
+  const applyStroke = useCallback((stroke: Stroke): void => {
+    if (!canvasRef.current) return;
+    drawingService.applyStroke(canvasRef.current, stroke);
+  }, [canvasRef]);
 
-  // Processa o movimento acumulado
-  const processStroke = useCallback(() => {
-    rafScheduled.current = false;
-    const e = latestEvent.current;
-    if (!e || !drawing.current || !lastPoint.current) return;
+  // Handlers de desenho
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+    if (!canvasRef.current) return;
 
-    const newPoint = {
-      x: e.nativeEvent.offsetX,
-      y: e.nativeEvent.offsetY,
-    };
+    const point = canvasService.getPointFromEvent(e);
+    
+    // Handle bucket tool differently - it's a one-click operation
+    if (tool === 'bucket') {
+      const stroke: Stroke = {
+        from: point,
+        to: point, // Same point for bucket fill
+        color,
+        lineWidth,
+        tool,
+        timestamp: Date.now(),
+      };
+
+      // Apply locally
+      applyStroke(stroke);
+      
+      // Send to other users
+      throttledDraw.current(stroke);
+      
+      // Save state after bucket fill
+      setTimeout(() => {
+        canvasService.saveCanvasState(canvasRef.current!);
+      }, 100);
+      
+      return;
+    }
+
+    // Normal drawing tools
+    isDrawing.current = true;
+    lastPoint.current = point;
+    
+    drawingService.startDrawing(canvasRef.current, {
+      tool,
+      color,
+      lineWidth,
+      point: lastPoint.current,
+    });
+  }, [tool, color, lineWidth, canvasRef, applyStroke]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+    // Bucket tool doesn't have move events
+    if (tool === 'bucket') return;
+    
+    if (!isDrawing.current || !lastPoint.current || !canvasRef.current) return;
+
+    const currentPoint = canvasService.getPointFromEvent(e);
+    
+    // Continue drawing on canvas
+    drawingService.continueDrawing(canvasRef.current, currentPoint, {
+      tool,
+      color,
+      lineWidth,
+      point: currentPoint,
+    });
 
     const stroke: Stroke = {
       from: lastPoint.current,
-      to: newPoint,
-      color: strokeColor,
+      to: currentPoint,
+      color,
       lineWidth,
-      tool: currentTool,
+      tool,
+      timestamp: Date.now(),
     };
 
-    applyStroke(stroke);
-    sendStroke(stroke);
+    // Send to other users (throttled)
+    throttledDraw.current(stroke);
 
-    // armazena no histórico local
-    strokesRef.current.push(stroke);
+    lastPoint.current = currentPoint;
+  }, [color, lineWidth, tool, canvasRef]);
 
-    lastPoint.current = newPoint;
-  }, [applyStroke, currentTool, lineWidth, sendStroke, strokeColor]);
+  const onPointerUp = useCallback((): void => {
+    // Bucket tool is handled in onPointerDown
+    if (tool === 'bucket') return;
+    
+    if (!isDrawing.current || !canvasRef.current) return;
 
-  // Agenda um requestAnimationFrame
-  const scheduleStroke = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>) => {
-      latestEvent.current = e;
-      if (!rafScheduled.current) {
-        rafScheduled.current = true;
-        requestAnimationFrame(processStroke);
-      }
-    },
-    [processStroke]
-  );
-
-  // Desenha snapshot + histórico
-  const drawAll = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (snapshotRef.current) {
-      const img = new Image();
-      img.src = snapshotRef.current;
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0);
-        strokesRef.current.forEach((s) => applyStroke(s));
-      };
-    } else {
-      strokesRef.current.forEach((s) => applyStroke(s));
-    }
-  }, [applyStroke, canvasRef]);
-
-  // Handlers pointer
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    drawing.current = true;
-    lastPoint.current = {
-      x: e.nativeEvent.offsetX,
-      y: e.nativeEvent.offsetY,
-    };
-  }, []);
-
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!drawing.current) return;
-      scheduleStroke(e);
-    },
-    [scheduleStroke]
-  );
-
-  const onPointerUp = useCallback(() => {
-    drawing.current = false;
+    isDrawing.current = false;
     lastPoint.current = null;
-    // opcional: salva snapshot no servidor
-    const canvas = canvasRef.current;
-    if (canvas) socket.emit("saveState", canvas.toDataURL());
-  }, [canvasRef]);
+    
+    drawingService.finishDrawing(canvasRef.current);
+    
+    // Salva estado do canvas (debounced internamente)
+    canvasService.saveCanvasState(canvasRef.current);
+  }, [canvasRef, tool]);
 
-  const resetBoard = useCallback((ack?: (err?: string) => void) => {
-    socket.emit("resetBoard", (err?: string) => {
-      if (ack) ack(err);
-    });
+  // Reset do quadro
+  const resetBoard = useCallback((callback?: (error?: string) => void): void => {
+    socket.emit('resetBoard', callback);
   }, []);
-  // Socket listeners
+
+  // Setup dos event listeners do socket
   useEffect(() => {
-    socket.connect();
-    socket.emit("joinRoom", roomId);
+    const handleConnect = (): void => {
+      isConnected.current = true;
+      socket.emit('joinRoom', roomId);
+    };
 
-    socket.on("drawing", (stroke: Stroke) => {
+    const handleDisconnect = (): void => {
+      isConnected.current = false;
+    };
+
+    const handleDrawing = (stroke: Stroke): void => {
       applyStroke(stroke);
-      strokesRef.current.push(stroke);
-    });
+    };
 
-    socket.on("initialState", (init: { snapshot: string | null; strokes: Stroke[] }) => {
-      snapshotRef.current = init.snapshot;
-      strokesRef.current = init.strokes;
-      drawAll();
-    });
+    const handleInitialState = (state: CanvasState): void => {
+      if (!canvasRef.current) return;
+      canvasService.restoreCanvasState(canvasRef.current, state);
+    };
 
-    socket.on("clearBoard", () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      strokesRef.current = [];
-      snapshotRef.current = null;
-    });
+    const handleClearBoard = (): void => {
+      if (!canvasRef.current) return;
+      canvasService.clearCanvas(canvasRef.current);
+    };
+
+    const handleError = (error: { event: string; message: string }): void => {
+      console.error(`Socket error on ${error.event}:`, error.message);
+    };
+
+    // Registra listeners
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('drawing', handleDrawing);
+    socket.on('initialState', handleInitialState);
+    socket.on('clearBoard', handleClearBoard);
+    socket.on('error', handleError);
+
+    // Conecta se não estiver conectado
+    if (!socket.connected) {
+      socket.connect();
+    }
 
     return () => {
-      socket.emit("leaveRoom");
-      socket.disconnect();
-      socket.off("drawing");
-      socket.off("initialState");
-      socket.off("clearBoard");
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('drawing', handleDrawing);
+      socket.off('initialState', handleInitialState);
+      socket.off('clearBoard', handleClearBoard);
+      socket.off('error', handleError);
+      
+      socket.emit('leaveRoom');
     };
-  }, [applyStroke, drawAll, roomId, canvasRef]);
+  }, [roomId, canvasRef, applyStroke]);
 
-  // Responsividade: resize + redraw
+  // Responsividade do canvas
   useEffect(() => {
-    const handleResize = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight - 80;
-      drawAll();
+    const handleResize = (): void => {
+      if (!canvasRef.current) return;
+      canvasService.resizeCanvas(canvasRef.current);
     };
-    window.addEventListener("resize", handleResize);
-    handleResize();
-    return () => window.removeEventListener("resize", handleResize);
-  }, [canvasRef, drawAll]);
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Executa uma vez no mount
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, [canvasRef]);
 
   return {
     onPointerDown,
     onPointerMove,
     onPointerUp,
-    resetBoard
+    resetBoard,
+    isConnected: isConnected.current,
   };
 }

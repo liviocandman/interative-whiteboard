@@ -22,18 +22,23 @@ export function useRooms(): UseRoomsReturn {
   const refreshRooms = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const [roomsData, statsData] = await Promise.all([
         roomService.getRooms(),
         roomService.getStats(),
       ]);
-      
+
       setRooms(roomsData);
       setStats(statsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar salas');
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar salas';
+      setError(errorMessage);
       console.error('Failed to refresh rooms:', err);
+
+      // Set empty arrays on error so UI can show empty state
+      setRooms([]);
+      setStats(null);
     } finally {
       setIsLoading(false);
     }
@@ -43,7 +48,7 @@ export function useRooms(): UseRoomsReturn {
     try {
       const room = await roomService.createRoom(data);
       setRooms(prev => [room, ...prev]);
-      
+
       // Update stats
       if (stats) {
         setStats(prev => prev ? {
@@ -53,7 +58,7 @@ export function useRooms(): UseRoomsReturn {
           privateRooms: data.isPublic ? prev.privateRooms : prev.privateRooms + 1,
         } : null);
       }
-      
+
       return room;
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Erro ao criar sala');
@@ -63,10 +68,10 @@ export function useRooms(): UseRoomsReturn {
   const joinRoom = useCallback(async (data: JoinRoomData): Promise<void> => {
     try {
       await roomService.joinRoom(data);
-      
+
       // Update room user count locally
-      setRooms(prev => prev.map(room => 
-        room.id === data.roomId 
+      setRooms(prev => prev.map(room =>
+        room.id === data.roomId
           ? { ...room, currentUsers: room.currentUsers + 1 }
           : room
       ));
@@ -78,10 +83,10 @@ export function useRooms(): UseRoomsReturn {
   const deleteRoom = useCallback(async (roomId: string): Promise<void> => {
     try {
       await roomService.deleteRoom(roomId);
-      
+
       const deletedRoom = rooms.find(r => r.id === roomId);
       setRooms(prev => prev.filter(room => room.id !== roomId));
-      
+
       // Update stats
       if (stats && deletedRoom) {
         setStats(prev => prev ? {

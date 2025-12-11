@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { RedisService } from '../services/core/RedisService';
+import { RedisService } from '../services/RedisService';
 import type { Stroke } from '../types';
 
 const ROOM_PATTERN = 'room:*';
@@ -19,7 +19,7 @@ export async function setupPubSub(io: Server): Promise<void> {
     });
 
     console.log(`📡 Subscribed to Redis Pub/Sub pattern: ${ROOM_PATTERN}`);
-    
+
   } catch (error) {
     console.error('Failed to setup Pub/Sub:', error);
     throw error;
@@ -32,12 +32,12 @@ function handlePubSubMessage(io: Server, message: string, channel: string): void
     if (!roomId) return;
 
     const data = JSON.parse(message) as PubSubMessage;
-    
+
     if (data.reset) {
       // Broadcast reset to all clients except origin
       const target = data.origin ? io.in(roomId).except(data.origin) : io.in(roomId);
       target.emit('clearBoard');
-      
+
       console.debug(`[PubSub] Broadcasted reset to room ${roomId}`);
       return;
     }
@@ -46,10 +46,10 @@ function handlePubSubMessage(io: Server, message: string, channel: string): void
       // Broadcast stroke to all clients except origin
       const target = data.origin ? io.in(roomId).except(data.origin) : io.in(roomId);
       target.emit('drawing', data.stroke);
-      
+
       console.debug(`[PubSub] Broadcasted stroke to room ${roomId}`);
     }
-    
+
   } catch (error) {
     console.error('[PubSub] Error handling message:', error);
   }

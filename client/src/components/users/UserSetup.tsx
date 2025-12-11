@@ -6,12 +6,12 @@ interface UserSetupProps {
 }
 
 const PRESET_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', 
-  '#FECA57', '#FF9FF3', '#54A0FF', '#FF6B6B'
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+  '#FECA57', '#FF9FF3', '#54A0FF', '#FD79A8'
 ];
 
 const PRESET_NAMES = [
-  'Designer', 'Developer', 'Manager', 'Student', 
+  'Designer', 'Developer', 'Manager', 'Student',
   'Teacher', 'Artist', 'Writer', 'Analyst'
 ];
 
@@ -35,29 +35,38 @@ export function UserSetup({ onSetup }: UserSetupProps): ReactElement {
   return (
     <div className="user-setup-overlay">
       <div className="user-setup-modal">
-        <h2>Entrar no Whiteboard</h2>
-        
-        <form onSubmit={handleSubmit}>
+        <div className="text-center mb-2">
+          <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-sm">
+            👋
+          </div>
+          <h2>Bem-vindo!</h2>
+          <p className="text-[var(--text-secondary)] text-sm mt-2">
+            Configure seu perfil para começar a colaborar.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <div className="form-group">
-            <label htmlFor="userName">Seu nome:</label>
+            <label htmlFor="userName" className="field-label mb-2">Seu nome</label>
             <div className="name-input-group">
               <input
                 id="userName"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Digite seu nome..."
+                placeholder="Como você quer ser chamado?"
                 maxLength={20}
                 autoFocus
+                className="flex-1"
               />
-              <Button type="button" onClick={generateRandomName} variant="default">
+              <Button type="button" onClick={generateRandomName} variant="default" title="Gerar nome aleatório">
                 🎲
               </Button>
             </div>
           </div>
 
           <div className="form-group">
-            <label>Escolha sua cor:</label>
+            <label className="field-label mb-2">Sua cor</label>
             <div className="color-grid">
               {PRESET_COLORS.map((color) => (
                 <button
@@ -73,7 +82,7 @@ export function UserSetup({ onSetup }: UserSetupProps): ReactElement {
           </div>
 
           <div className="form-actions">
-            <Button type="submit" variant="active" disabled={!name.trim()}>
+            <Button type="submit" variant="active" disabled={!name.trim()} className="w-full justify-center py-3">
               Entrar no Whiteboard
             </Button>
           </div>

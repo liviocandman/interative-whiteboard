@@ -72,7 +72,7 @@ export interface SocketEvents {
   saveState: (snapshot: string, ack?: (error?: string) => void) => void;
   leaveRoom: (ack?: (error?: string) => void) => void;
   resetBoard: (ack?: (error?: string) => void) => void;
-  
+
   // Server -> Client
   publishDrawing: (stroke: Stroke) => void;
   initialState: (state: CanvasState) => void;

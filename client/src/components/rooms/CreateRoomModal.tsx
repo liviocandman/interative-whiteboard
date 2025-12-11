@@ -101,7 +101,7 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
 
     setIsSubmitting(true);
@@ -142,7 +142,7 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
             {/* Basic Info */}
             <div className="form-section">
               <h3>Informações Básicas</h3>
-              
+
               <FormField
                 label="Nome da Sala *"
                 error={errors.name}
@@ -189,18 +189,18 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
             {/* Privacy & Access */}
             <div className="form-section">
               <h3>Privacidade e Acesso</h3>
-              
+
               <div className="privacy-toggle">
                 <Toggle
                   checked={formData.isPublic}
-                  onChange={(isPublic) => updateFormData({ 
-                    isPublic, 
-                    password: isPublic ? '' : formData.password 
+                  onChange={(isPublic) => updateFormData({
+                    isPublic,
+                    password: isPublic ? '' : formData.password
                   })}
                   label={formData.isPublic ? '🌐 Sala Pública' : '🔒 Sala Privada'}
                 />
                 <p className="toggle-description">
-                  {formData.isPublic 
+                  {formData.isPublic
                     ? 'Qualquer pessoa pode encontrar e entrar nesta sala'
                     : 'Apenas pessoas com a senha podem entrar nesta sala'
                   }
@@ -254,25 +254,25 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
                   <div className="settings-grid">
                     <div className="setting-group">
                       <h4>Permissões</h4>
-                      
+
                       <Toggle
                         checked={formData.settings.allowDrawing}
                         onChange={(allowDrawing) => updateSettings({ allowDrawing })}
                         label="✏️ Permitir desenho"
                       />
-                      
+
                       <Toggle
                         checked={formData.settings.allowChat}
                         onChange={(allowChat) => updateSettings({ allowChat })}
                         label="💬 Habilitar chat"
                       />
-                      
+
                       <Toggle
                         checked={formData.settings.allowExport}
                         onChange={(allowExport) => updateSettings({ allowExport })}
                         label="💾 Permitir export"
                       />
-                      
+
                       <Toggle
                         checked={formData.settings.requireApproval}
                         onChange={(requireApproval) => updateSettings({ requireApproval })}
@@ -282,11 +282,11 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
 
                     <div className="setting-group">
                       <h4>Canvas</h4>
-                      
+
                       <FormField label="Tamanho do Canvas" icon="📐">
                         <select
                           value={formData.settings.canvasSize}
-                          onChange={(e) => updateSettings({ 
+                          onChange={(e) => updateSettings({
                             canvasSize: e.target.value as RoomSettings['canvasSize']
                           })}
                         >
@@ -304,20 +304,20 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
                             <input
                               type="number"
                               value={formData.settings.customWidth || ''}
-                              onChange={(e) => updateSettings({ 
-                                customWidth: Number(e.target.value) 
+                              onChange={(e) => updateSettings({
+                                customWidth: Number(e.target.value)
                               })}
                               min={400}
                               placeholder="1200"
                             />
                           </FormField>
-                          
+
                           <FormField label="Altura (px)" error={errors.customHeight}>
                             <input
                               type="number"
                               value={formData.settings.customHeight || ''}
-                              onChange={(e) => updateSettings({ 
-                                customHeight: Number(e.target.value) 
+                              onChange={(e) => updateSettings({
+                                customHeight: Number(e.target.value)
                               })}
                               min={300}
                               placeholder="800"
@@ -333,9 +333,8 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
                               key={color.value}
                               type="button"
                               onClick={() => updateSettings({ backgroundColor: color.value })}
-                              className={`color-option ${
-                                formData.settings.backgroundColor === color.value ? 'selected' : ''
-                              }`}
+                              className={`color-option ${formData.settings.backgroundColor === color.value ? 'selected' : ''
+                                }`}
                               style={{ backgroundColor: color.preview }}
                               title={color.label}
                             />
@@ -346,19 +345,19 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
 
                     <div className="setting-group">
                       <h4>Recursos</h4>
-                      
+
                       <Toggle
                         checked={formData.settings.enableGrid}
                         onChange={(enableGrid) => updateSettings({ enableGrid })}
                         label="⊞ Mostrar grade"
                       />
-                      
+
                       <Toggle
                         checked={formData.settings.enableRulers}
                         onChange={(enableRulers) => updateSettings({ enableRulers })}
                         label="📏 Mostrar réguas"
                       />
-                      
+
                       <Toggle
                         checked={formData.settings.autoSave}
                         onChange={(autoSave) => updateSettings({ autoSave })}
@@ -369,8 +368,8 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
                         <input
                           type="number"
                           value={formData.settings.historyLimit}
-                          onChange={(e) => updateSettings({ 
-                            historyLimit: Number(e.target.value) 
+                          onChange={(e) => updateSettings({
+                            historyLimit: Number(e.target.value)
                           })}
                           min={5}
                           max={100}
@@ -398,7 +397,7 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
             >
               Cancelar
             </Button>
-            
+
             <Button
               type="submit"
               variant="active"

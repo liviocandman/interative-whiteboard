@@ -1,0 +1,6 @@
+.whiteboard-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}

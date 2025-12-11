@@ -2,7 +2,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Room } from '../../types/room';
 
-
 interface RoomCardProps {
   room: Room;
   viewMode: 'grid' | 'list';
@@ -14,7 +13,7 @@ interface RoomCardProps {
 export function RoomCard({ room, viewMode, onJoin, onDelete, onPreview }: RoomCardProps) {
   const isOwner = false; // TODO: Check if current user is owner
   const occupancyPercentage = (room.currentUsers / room.maxUsers) * 100;
-  
+
   return (
     <div className={`room-card ${viewMode} ${!room.isPublic ? 'private' : ''}`}>
       {/* Thumbnail */}
@@ -24,7 +23,7 @@ export function RoomCard({ room, viewMode, onJoin, onDelete, onPreview }: RoomCa
           <div className="room-privacy">
             {room.isPublic ? '🌐' : '🔒'}
           </div>
-          
+
           {room.hasPassword && (
             <div className="room-password">🔑</div>
           )}
@@ -37,7 +36,7 @@ export function RoomCard({ room, viewMode, onJoin, onDelete, onPreview }: RoomCa
           <h3 className="room-name" title={room.name}>
             {room.name}
           </h3>
-          
+
           <div className="room-actions">
             <button
               onClick={onPreview}
@@ -46,7 +45,7 @@ export function RoomCard({ room, viewMode, onJoin, onDelete, onPreview }: RoomCa
             >
               👁️
             </button>
-            
+
             {isOwner && (
               <button
                 onClick={onDelete}
@@ -87,7 +86,7 @@ export function RoomCard({ room, viewMode, onJoin, onDelete, onPreview }: RoomCa
               {room.currentUsers}/{room.maxUsers}
             </span>
             <div className="occupancy-bar">
-              <div 
+              <div
                 className="occupancy-fill"
                 style={{ width: `${occupancyPercentage}%` }}
               />
@@ -138,7 +137,7 @@ export function RoomCard({ room, viewMode, onJoin, onDelete, onPreview }: RoomCa
       <div className="room-footer">
         <button
           onClick={onJoin}
-          className="join-btn"
+          className="btn btn-primary w-full justify-center"
           disabled={room.currentUsers >= room.maxUsers}
         >
           {room.currentUsers >= room.maxUsers ? (

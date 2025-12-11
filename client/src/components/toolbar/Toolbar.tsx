@@ -75,7 +75,7 @@ export function Toolbar({
 
   const handleToolChange = (tool: Tool): void => {
     onToolChange(tool);
-    
+
     // Change cursor based on tool
     const cursor = drawingService.getToolCursor(tool);
     document.body.style.cursor = cursor;
@@ -99,7 +99,7 @@ export function Toolbar({
         <div className="toolbar-section user-section">
           {currentUser && (
             <div className="current-user-info">
-              <div 
+              <div
                 className="user-avatar small"
                 style={{ backgroundColor: currentUser.color }}
               >
@@ -108,7 +108,7 @@ export function Toolbar({
               <span className="user-name-small">{currentUser.name}</span>
             </div>
           )}
-          
+
           <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
             <div className="status-indicator" />
             <span className="status-text">
@@ -125,7 +125,7 @@ export function Toolbar({
             currentTool={currentTool}
             onToolChange={handleToolChange}
           />
-          
+
         </div>
 
         {/* Current tool info */}
@@ -147,7 +147,7 @@ export function Toolbar({
             <label>Cor:</label>
             <ColorPicker value={strokeColor} onChange={onColorChange} />
           </div>
-          
+
           <div className="setting-group">
             <label>Espessura:</label>
             <StrokeWidthSlider
@@ -171,7 +171,7 @@ export function Toolbar({
           >
             ↶
           </Button>
-          
+
           <Button
             onClick={onRedo}
             disabled={!canRedo}
@@ -193,7 +193,7 @@ export function Toolbar({
           >
             💾
           </Button>
-          
+
           <Button
             onClick={onResetBoard}
             title="Limpar quadro"
@@ -202,7 +202,7 @@ export function Toolbar({
           >
             🗑️
           </Button>
-          
+
           <Button
             onClick={() => setShowAdvanced(!showAdvanced)}
             title="Configurações avançadas"

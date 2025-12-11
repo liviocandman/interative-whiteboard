@@ -6,6 +6,7 @@ export interface Room {
   hasPassword: boolean;
   maxUsers: number;
   currentUsers: number;
+  thumbnail?: string;
   tags: string[];
   createdAt: Date;
   updatedAt: Date;

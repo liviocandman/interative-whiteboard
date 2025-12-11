@@ -4,6 +4,7 @@ import { WhiteboardPage } from './pages/WhiteboardPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 import './styles/rooms.css';
+import './styles/modal.css';
 
 
 function App() {
@@ -13,16 +14,16 @@ function App() {
         <Routes>
           {/* Home page with room browser */}
           <Route path="/" element={<HomePage />} />
-          
+
           {/* Whiteboard page */}
           <Route path="/whiteboard" element={<WhiteboardPage />} />
-          
+
           {/* Redirect old room URLs */}
-          <Route 
-            path="/room/:roomId" 
-            element={<Navigate to="/whiteboard" replace />} 
+          <Route
+            path="/room/:roomId"
+            element={<Navigate to="/whiteboard" replace />}
           />
-          
+
           {/* 404 page */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

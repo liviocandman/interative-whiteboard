@@ -20,9 +20,9 @@ export function UserCursor({ user, canvasRect }: UserCursorProps): ReactElement 
 
   return (
     <div className="user-cursor" style={style}>
-      <div 
+      <div
         className="cursor-pointer"
-        style={{ 
+        style={{
           backgroundColor: user.color,
           boxShadow: user.isDrawing ? `0 0 10px ${user.color}` : 'none'
         }}

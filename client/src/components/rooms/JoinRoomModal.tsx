@@ -23,7 +23,7 @@ export function JoinRoomModal({ room, onJoinRoom, onClose }: JoinRoomModalProps)
     setError('');
 
     const roomId = mode === 'specific' ? room!.id : customRoomId.trim();
-    
+
     if (!roomId) {
       setError('Código da sala é obrigatório');
       return;
@@ -67,8 +67,8 @@ export function JoinRoomModal({ room, onJoinRoom, onClose }: JoinRoomModalProps)
               <>🚪 Entrar com Código</>
             )}
           </h2>
-          <button 
-            onClick={handleClose} 
+          <button
+            onClick={handleClose}
             className="close-btn"
             disabled={isSubmitting}
           >
@@ -179,7 +179,7 @@ export function JoinRoomModal({ room, onJoinRoom, onClose }: JoinRoomModalProps)
             >
               Cancelar
             </Button>
-            
+
             <Button
               type="submit"
               variant="active"

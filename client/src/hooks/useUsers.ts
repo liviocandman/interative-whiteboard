@@ -17,21 +17,42 @@ export function useUsers(): UseUsersReturn {
   const [isSettingUp, setIsSettingUp] = useState(true);
 
   const setupUser = useCallback((name: string, color: string): void => {
-    const user: User = {
-      id: socket.id || '',
-      name,
-      color,
-      cursor: { x: 0, y: 0 },
-      isDrawing: false,
-      lastSeen: new Date(),
-      isOnline: true,
+    console.log('[useUsers] setupUser called with:', { name, color, socketId: socket.id, connected: socket.connected });
+
+    // Ensure socket is connected
+    if (!socket.connected) {
+      console.warn('[useUsers] Socket not connected, connecting first...');
+      socket.connect();
+    }
+
+    // Wait a moment for socket.id to be available
+    const createUser = () => {
+      if (!socket.id) {
+        console.error('[useUsers] Socket ID not available yet, retrying...');
+        setTimeout(createUser, 100);
+        return;
+      }
+
+      const user: User = {
+        id: socket.id,
+        name,
+        color,
+        cursor: { x: 0, y: 0 },
+        isDrawing: false,
+        lastSeen: new Date(),
+        isOnline: true,
+      };
+
+      console.log('[useUsers] Created user:', user);
+      setCurrentUser(user);
+      setIsSettingUp(false);
+
+      // Enviar dados do usuário para o servidor
+      console.log('[useUsers] Emitting userSetup to server');
+      socket.emit('userSetup', { name, color });
     };
 
-    setCurrentUser(user);
-    setIsSettingUp(false);
-
-    // Enviar dados do usuário para o servidor
-    socket.emit('userSetup', { name, color });
+    createUser();
   }, []);
 
   const updateCursor = useCallback((position: Point): void => {
@@ -55,11 +76,15 @@ export function useUsers(): UseUsersReturn {
 
   // Socket event listeners
   useEffect(() => {
+    console.log('[useUsers] Setting up socket listeners');
+
     const handleUserJoined = (user: User): void => {
+      console.log('[useUsers] userJoined event received:', user);
       setOtherUsers(prev => new Map(prev.set(user.id, user)));
     };
 
     const handleUserLeft = (userId: string): void => {
+      console.log('[useUsers] userLeft event received:', userId);
       setOtherUsers(prev => {
         const newMap = new Map(prev);
         newMap.delete(userId);
@@ -90,6 +115,7 @@ export function useUsers(): UseUsersReturn {
     };
 
     const handleRoomUsers = (users: User[]): void => {
+      console.log('[useUsers] roomUsers event received:', users);
       const usersMap = new Map<string, User>();
       users.forEach(user => {
         if (user.id !== socket.id) {
@@ -97,6 +123,7 @@ export function useUsers(): UseUsersReturn {
         }
       });
       setOtherUsers(usersMap);
+      console.log('[useUsers] Updated otherUsers map:', usersMap);
     };
 
     socket.on('userJoined', handleUserJoined);
@@ -105,12 +132,21 @@ export function useUsers(): UseUsersReturn {
     socket.on('drawingState', handleDrawingState);
     socket.on('roomUsers', handleRoomUsers);
 
+    // When socket connects, the roomUsers event should be sent automatically by server
+    // but let's log it
+    const handleConnect = (): void => {
+      console.log('[useUsers] Socket connected, ID:', socket.id);
+    };
+
+    socket.on('connect', handleConnect);
+
     return () => {
       socket.off('userJoined', handleUserJoined);
       socket.off('userLeft', handleUserLeft);
       socket.off('cursorMove', handleCursorMove);
       socket.off('drawingState', handleDrawingState);
       socket.off('roomUsers', handleRoomUsers);
+      socket.off('connect', handleConnect);
     };
   }, []);
 

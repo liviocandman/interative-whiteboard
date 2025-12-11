@@ -14,15 +14,18 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "redis": "^5.8.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@swc/cli": "^0.7.8",
     "@swc/core": "^1.13.5",
+    "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.1",
     "socket.io-client": "^4.8.1",

@@ -1,5 +1,5 @@
 // client/src/hooks/useWhiteboard.ts
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { socket } from '../services/socket';
 import { canvasService } from '../services/canvasService';
 import { drawingService } from '../services/drawingService';
@@ -20,6 +20,8 @@ interface UseWhiteboardReturn {
   onPointerUp: () => void;
   resetBoard: (callback?: (error?: string) => void) => void;
   isConnected: boolean;
+  undoStroke: () => void;
+  redoStroke: () => void;
 }
 
 export function useWhiteboard({
@@ -31,9 +33,9 @@ export function useWhiteboard({
 }: UseWhiteboardProps): UseWhiteboardReturn {
   const isDrawing = useRef(false);
   const lastPoint = useRef<Point | null>(null);
-  const isConnected = useRef(false);
+  const [isConnected, setIsConnected] = useState(false);
 
-  // Throttled drawing para performance - define o tipo explicitamente
+  // Throttled drawing para performance
   const throttledDraw = useRef(
     throttle((stroke: Stroke): void => {
       socket.emit('drawing', stroke);
@@ -51,36 +53,28 @@ export function useWhiteboard({
     if (!canvasRef.current) return;
 
     const point = canvasService.getPointFromEvent(e);
-    
+
     // Handle bucket tool differently - it's a one-click operation
     if (tool === 'bucket') {
       const stroke: Stroke = {
         from: point,
-        to: point, // Same point for bucket fill
+        to: point,
         color,
         lineWidth,
         tool,
         timestamp: Date.now(),
       };
 
-      // Apply locally
       applyStroke(stroke);
-      
-      // Send to other users
       throttledDraw.current(stroke);
-      
-      // Save state after bucket fill
-      setTimeout(() => {
-        canvasService.saveCanvasState(canvasRef.current!);
-      }, 100);
-      
+
       return;
     }
 
     // Normal drawing tools
     isDrawing.current = true;
     lastPoint.current = point;
-    
+
     drawingService.startDrawing(canvasRef.current, {
       tool,
       color,
@@ -90,14 +84,12 @@ export function useWhiteboard({
   }, [tool, color, lineWidth, canvasRef, applyStroke]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
-    // Bucket tool doesn't have move events
     if (tool === 'bucket') return;
-    
+
     if (!isDrawing.current || !lastPoint.current || !canvasRef.current) return;
 
     const currentPoint = canvasService.getPointFromEvent(e);
-    
-    // Continue drawing on canvas
+
     drawingService.continueDrawing(canvasRef.current, currentPoint, {
       tool,
       color,
@@ -114,41 +106,73 @@ export function useWhiteboard({
       timestamp: Date.now(),
     };
 
-    // Send to other users (throttled)
     throttledDraw.current(stroke);
 
     lastPoint.current = currentPoint;
   }, [color, lineWidth, tool, canvasRef]);
 
   const onPointerUp = useCallback((): void => {
-    // Bucket tool is handled in onPointerDown
     if (tool === 'bucket') return;
-    
+
     if (!isDrawing.current || !canvasRef.current) return;
 
     isDrawing.current = false;
     lastPoint.current = null;
-    
+
     drawingService.finishDrawing(canvasRef.current);
-    
-    // Salva estado do canvas (debounced internamente)
-    canvasService.saveCanvasState(canvasRef.current);
   }, [canvasRef, tool]);
 
   // Reset do quadro
   const resetBoard = useCallback((callback?: (error?: string) => void): void => {
-    socket.emit('resetBoard', callback);
+    console.log('[useWhiteboard] Resetting board...');
+    socket.emit('resetBoard', (error?: string) => {
+      if (error) {
+        console.error('[useWhiteboard] Reset board error:', error);
+        alert(`Erro ao limpar quadro: ${error}`);
+      } else {
+        console.log('[useWhiteboard] Board reset successfully');
+        if (canvasRef.current) {
+          canvasService.clearCanvas(canvasRef.current);
+        }
+      }
+      callback?.(error);
+    });
+  }, [canvasRef]);
+
+  // Undo stroke via server
+  const undoStroke = useCallback((): void => {
+    console.log('[useWhiteboard] Requesting undo...');
+    socket.emit('undoStroke', (result: { success: boolean; strokeId?: string }) => {
+      if (result.success) {
+        console.log('[useWhiteboard] Undo successful');
+      } else {
+        console.log('[useWhiteboard] Nothing to undo');
+      }
+    });
+  }, []);
+
+  // Redo stroke via server
+  const redoStroke = useCallback((): void => {
+    console.log('[useWhiteboard] Requesting redo...');
+    socket.emit('redoStroke', (result: { success: boolean }) => {
+      if (result.success) {
+        console.log('[useWhiteboard] Redo successful');
+      } else {
+        console.log('[useWhiteboard] Nothing to redo');
+      }
+    });
   }, []);
 
   // Setup dos event listeners do socket
   useEffect(() => {
     const handleConnect = (): void => {
-      isConnected.current = true;
+      setIsConnected(true);
+      console.log('[useWhiteboard] Socket connected, joining room:', roomId);
       socket.emit('joinRoom', roomId);
     };
 
     const handleDisconnect = (): void => {
-      isConnected.current = false;
+      setIsConnected(false);
     };
 
     const handleDrawing = (stroke: Stroke): void => {
@@ -157,10 +181,12 @@ export function useWhiteboard({
 
     const handleInitialState = (state: CanvasState): void => {
       if (!canvasRef.current) return;
+      console.log('[useWhiteboard] Received initialState, restoring canvas...');
       canvasService.restoreCanvasState(canvasRef.current, state);
     };
 
     const handleClearBoard = (): void => {
+      console.log('[useWhiteboard] Received clearBoard event');
       if (!canvasRef.current) return;
       canvasService.clearCanvas(canvasRef.current);
     };
@@ -180,6 +206,10 @@ export function useWhiteboard({
     // Conecta se não estiver conectado
     if (!socket.connected) {
       socket.connect();
+    } else {
+      console.log('[useWhiteboard] Socket already connected, joining room:', roomId);
+      setIsConnected(true);
+      socket.emit('joinRoom', roomId);
     }
 
     return () => {
@@ -189,7 +219,7 @@ export function useWhiteboard({
       socket.off('initialState', handleInitialState);
       socket.off('clearBoard', handleClearBoard);
       socket.off('error', handleError);
-      
+
       socket.emit('leaveRoom');
     };
   }, [roomId, canvasRef, applyStroke]);
@@ -202,16 +232,42 @@ export function useWhiteboard({
     };
 
     window.addEventListener('resize', handleResize);
-    handleResize(); // Executa uma vez no mount
+    handleResize();
 
     return () => window.removeEventListener('resize', handleResize);
   }, [canvasRef]);
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      const isMod = e.ctrlKey || e.metaKey;
+      if (!isMod) return;
+
+      const key = e.key.toLowerCase();
+      if (key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redoStroke();
+        } else {
+          undoStroke();
+        }
+      } else if (key === 'y') {
+        e.preventDefault();
+        redoStroke();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undoStroke, redoStroke]);
 
   return {
     onPointerDown,
     onPointerMove,
     onPointerUp,
     resetBoard,
-    isConnected: isConnected.current,
+    isConnected,
+    undoStroke,
+    redoStroke,
   };
 }

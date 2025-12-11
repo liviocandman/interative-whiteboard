@@ -47,14 +47,14 @@ export function RoomPreview({ room, onJoin, onClose }: RoomPreviewProps): ReactE
                     {room.isPublic ? '🌐 Pública' : '🔒 Privada'}
                   </span>
                 </div>
-                
+
                 <div className="info-item">
                   <span className="info-label">Usuários:</span>
                   <span className="info-value">
                     {room.currentUsers}/{room.maxUsers}
                   </span>
                 </div>
-                
+
                 <div className="info-item">
                   <span className="info-label">Criado:</span>
                   <span className="info-value">
@@ -64,7 +64,7 @@ export function RoomPreview({ room, onJoin, onClose }: RoomPreviewProps): ReactE
                     })}
                   </span>
                 </div>
-                
+
                 <div className="info-item">
                   <span className="info-label">Criador:</span>
                   <span className="info-value">
@@ -96,14 +96,14 @@ export function RoomPreview({ room, onJoin, onClose }: RoomPreviewProps): ReactE
                   </span>
                   <span>Desenho permitido</span>
                 </div>
-                
+
                 <div className="setting-item">
                   <span className={`setting-status ${room.settings.allowChat ? 'enabled' : 'disabled'}`}>
                     {room.settings.allowChat ? '✅' : '❌'}
                   </span>
                   <span>Chat habilitado</span>
                 </div>
-                
+
                 <div className="setting-item">
                   <span className={`setting-status ${room.settings.allowExport ? 'enabled' : 'disabled'}`}>
                     {room.settings.allowExport ? '✅' : '❌'}

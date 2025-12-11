@@ -1,9 +1,9 @@
 /* client/src/styles/rooms.css */
 
 /* Home Page Layout */
+/* Note: .home-page background is now defined in index.css to use the background image */
 .home-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
@@ -1118,31 +1118,32 @@
 
 /* Mobile Responsive */
 @media (max-width: 640px) {
+
   .loading-content,
   .not-found-content {
     padding: 2rem 1.5rem;
     margin: 1rem;
   }
-  
+
   .not-found-content h1 {
     font-size: 1.5rem;
   }
-  
+
   .not-found-actions {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .home-btn,
   .back-btn,
   .retry-btn {
     justify-content: center;
   }
-  
+
   .loading-steps {
     text-align: center;
   }
-  
+
   .step {
     justify-content: center;
   }

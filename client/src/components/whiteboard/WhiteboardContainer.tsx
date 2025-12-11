@@ -1,38 +1,42 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { Toolbar } from '../toolbar/Toolbar';
 import { Whiteboard } from './Whiteboard';
+import { TopBar } from './TopBar';
+import { LeftSidebar } from './LeftSidebar';
 import { useWhiteboard } from '../../hooks/useWhiteboard';
 import { useHistory } from '../../hooks/useHistory';
-import type { Tool, ToolbarSettings } from '../../types';
+import type { Tool, User } from '../../types';
+import './WhiteboardContainer.css';
 
 interface WhiteboardContainerProps {
-  roomId: string
+  roomId?: string;
+  currentUser: User | null;
+  otherUsers: User[];
 }
 
-export function WhiteboardContainer({roomId}: WhiteboardContainerProps) {
+export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUsers }: WhiteboardContainerProps) {
   // State management
   const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState('#000000');
-  const [lineWidth, setLineWidth] = useState(3);
-  const [settings, setSettings] = useState<ToolbarSettings>({
-    showGrid: false,
-    snapToGrid: false,
-    gridSize: 20,
-  });
-  
+  const [lineWidth] = useState(3);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Room ID from URL
-    roomId = useMemo(() => {
+  // Room ID from URL or prop
+  const roomId = useMemo(() => {
+    if (propRoomId) return propRoomId;
     const params = new URLSearchParams(window.location.search);
     return params.get('roomId') || `room-${Date.now()}`;
-  }, []);
+  }, [propRoomId]);
+
+  // Log users for debugging
+  console.log('WhiteboardContainer - currentUser:', currentUser);
+  console.log('WhiteboardContainer - otherUsers:', otherUsers);
 
   // Hooks
   const {
-    onPointerDown,
+    onPointerDown: originalOnPointerDown,
     onPointerMove,
-    onPointerUp,
+    onPointerUp: originalOnPointerUp,
     resetBoard,
     isConnected,
   } = useWhiteboard({
@@ -44,150 +48,84 @@ export function WhiteboardContainer({roomId}: WhiteboardContainerProps) {
   });
 
   const {
-    canUndo,
-    canRedo,
+    saveState,
     undo,
     redo,
-    saveState,
   } = useHistory(canvasRef);
+
+  // Wrap onPointerDown to save state before drawing
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    saveState();
+    originalOnPointerDown(e);
+  }, [saveState, originalOnPointerDown]);
+
+  // Wrap onPointerUp to save state after drawing
+  const onPointerUp = useCallback(() => {
+    originalOnPointerUp();
+    // Small delay to ensure the drawing is complete before saving
+    setTimeout(() => {
+      saveState();
+    }, 50);
+  }, [saveState, originalOnPointerUp]);
 
   // Handlers
   const handleToolChange = useCallback((newTool: Tool): void => {
-    // Save state before changing tools for undo/redo
-    saveState();
     setTool(newTool);
-    
-    // Special handling for different tools
-    if (newTool === 'bucket') {
-      // Could show a tooltip or highlight areas
-      console.log('Bucket tool selected - click on canvas to fill areas');
-    }
-  }, [saveState]);
+  }, []);
 
   const handleExport = useCallback((): void => {
     if (!canvasRef.current) return;
-    
+
     try {
-      // Create download link
       const link = document.createElement('a');
       link.download = `whiteboard-${roomId}-${new Date().toISOString().slice(0, 10)}.png`;
       link.href = canvasRef.current.toDataURL('image/png');
       link.click();
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Falha ao exportar a imagem. Tente novamente.');
+      alert('Falha ao exportar a imagem.');
     }
   }, [roomId]);
 
-  const handleReset = useCallback((): void => {
-    const confirmed = window.confirm(
-      'Tem certeza que deseja limpar o quadro? Esta ação não pode ser desfeita.'
-    );
-    
-    if (confirmed) {
-      saveState(); // Save current state before reset for undo
-      resetBoard();
-    }
-  }, [saveState, resetBoard]);
+  // Combine current user and other users for TopBar
+  const allUsers = currentUser ? [currentUser, ...otherUsers] : otherUsers;
 
-  // Mock current user (replace with real user data)
-  const currentUser = {
-    id: 'user-123',
-    name: 'Designer',
-    color: color,
-    cursor: { x: 0, y: 0 },
-    isDrawing: false,
-    lastSeen: new Date(),
-    isOnline: true,
-  };
+  console.log('WhiteboardContainer - allUsers for TopBar:', allUsers);
 
   return (
-    <div className="enhanced-whiteboard-container">
-      {/* Header */}
-      <div className="whiteboard-header">
-        <div className="room-info">
-          <h1 className="room-title">Whiteboard - {roomId}</h1>
-          <div className="room-stats">
-            <span className="stat">👥 1 usuário</span>
-            <span className="stat">🎨 {tool}</span>
-          </div>
-        </div>
-
-        <div className="header-actions">
-          <div className="export-info">
-            <span className="export-hint">💡 Use Ctrl+S para salvar ou clique em 💾 para exportar</span>
-          </div>
-        </div>
-      </div>
-
-      {/*  Toolbar */}
-      <Toolbar
-        currentTool={tool}
-        onToolChange={handleToolChange}
-        strokeColor={color}
-        onColorChange={setColor}
-        lineWidth={lineWidth}
-        onLineWidthChange={setLineWidth}
-        onResetBoard={handleReset}
-        isConnected={isConnected}
+    <div className="whiteboard-layout">
+      {/* Top Navigation */}
+      <TopBar
+        roomId={roomId}
         currentUser={currentUser}
-        canUndo={canUndo}
-        canRedo={canRedo}
+        users={allUsers}
+        onExport={handleExport}
+        isConnected={isConnected}
+        onReset={resetBoard}
         onUndo={undo}
         onRedo={redo}
-        onExport={handleExport}
-        settings={settings}
-        onSettingsChange={setSettings}
       />
 
-      {/* Main Canvas Area */}
-      <div className="canvas-area">
-        {/* Grid overlay if enabled */}
-        {settings.showGrid && (
-          <div 
-            className="grid-overlay"
-            style={{
-              '--grid-size': `${settings.gridSize}px`
-            } as React.CSSProperties}
-          />
-        )}
+      <div className="whiteboard-content">
+        {/* Floating Tools Sidebar */}
+        <LeftSidebar
+          currentTool={tool}
+          onToolChange={handleToolChange}
+          color={color}
+          onColorChange={setColor}
+        />
 
-        {/* Main Canvas */}
-        <div className="canvas-wrapper">
-          <Whiteboard
-            ref={canvasRef}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            currentTool={tool}
-          />
-
-          {/* Tool-specific overlays */}
-          {tool === 'bucket' && (
-            <div className="tool-overlay bucket-overlay">
-              <div className="tool-hint">
-                🪣 Clique em uma área para preencher com a cor selecionada
-              </div>
-            </div>
-          )}
-
-          
-        </div>
-      </div>
-
-      {/* Status Bar */}
-      <div className="status-bar">
-        <div className="status-left">
-          <span className="status-item">Ferramenta: {tool}</span>
-          <span className="status-item">Cor: {color}</span>
-          <span className="status-item">Espessura: {lineWidth}px</span>
-        </div>
-        
-        <div className="status-right">
-          <span className="status-item">
-            {isConnected ? '🟢 Conectado' : '🔴 Desconectado'}
-          </span>
-          <span className="status-item">Sala: {roomId}</span>
+        {/* Main Canvas Area */}
+        <div className="canvas-container">
+          <div className="canvas-wrapper">
+            <Whiteboard
+              ref={canvasRef}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              currentTool={tool}
+            />
+          </div>
         </div>
       </div>
     </div>

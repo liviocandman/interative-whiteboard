@@ -14,23 +14,23 @@ export function UserList({ currentUser, otherUsers }: UserListProps): ReactEleme
       <div className="user-list-header">
         <span className="user-count">{allUsers.length} usuários</span>
       </div>
-      
+
       <div className="user-list-items">
         {allUsers.map(user => (
           <div key={user.id} className="user-item">
-            <div 
+            <div
               className="user-avatar"
               style={{ backgroundColor: user.color }}
             >
               {user.name.charAt(0).toUpperCase()}
             </div>
-            
+
             <div className="user-info">
               <span className="user-name">
                 {user.name}
                 {user.id === currentUser?.id && ' (você)'}
               </span>
-              
+
               <div className="user-status">
                 <span className={`status-dot ${user.isOnline ? 'online' : 'offline'}`} />
                 {user.isDrawing && <span className="drawing-indicator">✏️</span>}

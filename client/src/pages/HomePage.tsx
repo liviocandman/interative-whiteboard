@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import { RoomBrowser } from '../components/rooms/RoomBrowser';
 import { CreateRoomModal } from '../components/rooms/CreateRoomModal';
 import { JoinRoomModal } from '../components/rooms/JoinRoomModal';
-import { SearchBar } from '../components/rooms/SearchBar';
-import { SortControls } from '../components/rooms/SortControls';
 import { useRooms } from '../hooks/useRooms';
 import type { Room, RoomFilter, CreateRoomData, JoinRoomData } from '../types/room';
+import { Icons } from '../components/ui/Icons';
 
 export function HomePage(): ReactElement {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -29,10 +28,9 @@ export function HomePage(): ReactElement {
     refreshRooms,
   } = useRooms();
 
-  // Refresh rooms on mount and periodically
   useEffect(() => {
     refreshRooms();
-    const interval = setInterval(refreshRooms, 30000); // Refresh every 30s
+    const interval = setInterval(refreshRooms, 30000);
     return () => clearInterval(interval);
   }, [refreshRooms]);
 
@@ -40,7 +38,6 @@ export function HomePage(): ReactElement {
     try {
       const room = await createRoom(data);
       setShowCreateModal(false);
-
       window.location.href = `/whiteboard?roomId=${room.id}`;
     } catch (error) {
       console.error('Failed to create room:', error);
@@ -52,7 +49,6 @@ export function HomePage(): ReactElement {
     try {
       await joinRoom(data);
       setShowJoinModal(false);
-
       window.location.href = `/whiteboard?roomId=${data.roomId}`;
     } catch (error) {
       console.error('Failed to join room:', error);
@@ -70,235 +66,136 @@ export function HomePage(): ReactElement {
   }, [handleJoinRoom]);
 
   const handleDeleteRoom = useCallback(async (roomId: string): Promise<void> => {
-    if (window.confirm('Tem certeza que deseja deletar esta sala? Esta ação não pode ser desfeita.')) {
+    if (window.confirm('Tem certeza que deseja deletar esta sala?')) {
       try {
         await deleteRoom(roomId);
         refreshRooms();
       } catch (error) {
         console.error('Failed to delete room:', error);
-        alert('Erro ao deletar a sala. Tente novamente.');
+        alert('Erro ao deletar a sala.');
       }
     }
   }, [deleteRoom, refreshRooms]);
 
   const filteredRooms = rooms.filter(room => {
-    // Search filter
     if (filter.search) {
       const searchLower = filter.search.toLowerCase();
-      if (
-        !room.name.toLowerCase().includes(searchLower) &&
-        !room.description.toLowerCase().includes(searchLower) &&
-        !room.tags.some(tag => tag.toLowerCase().includes(searchLower))
-      ) {
+      if (!room.name.toLowerCase().includes(searchLower) &&
+        !room.description.toLowerCase().includes(searchLower)) {
         return false;
       }
     }
-
-    // Public only filter
-    if (filter.isPublicOnly && !room.isPublic) {
-      return false;
-    }
-
-    // Tags filter
-    if (filter.tags.length > 0) {
-      if (!filter.tags.some(tag => room.tags.includes(tag))) {
-        return false;
-      }
-    }
-
+    if (filter.isPublicOnly && !room.isPublic) return false;
     return true;
-  }).sort((a, b) => {
-    let comparison = 0;
-    
-    switch (filter.sortBy) {
-      case 'name':
-        comparison = a.name.localeCompare(b.name);
-        break;
-      case 'created':
-        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        break;
-      case 'updated':
-        comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
-        break;
-      case 'users':
-        comparison = a.currentUsers - b.currentUsers;
-        break;
-    }
-    
-    return filter.sortOrder === 'desc' ? -comparison : comparison;
   });
 
   return (
-    <div className="home-page">
-      {/* Header */}
-      <header className="home-header">
-        <div className="header-content">
-          <div className="brand">
-            <h1 className="app-title">
-              <span className="logo">🎨</span>
-              Collaborative Whiteboard
-            </h1>
-            <p className="app-subtitle">
-              Crie, colabore e compartilhe suas ideias em tempo real
-            </p>
+    <div className="home-page min-h-screen text-[var(--text-primary)] font-sans">
+      {/* Navbar */}
+      <nav className="navbar">
+        <div className="navbar-content">
+          <div className="logo-container">
+            <div className="logo-icon">
+              <Icons.Grid className="w-5 h-5" />
+            </div>
+            <span className="text-headline tracking-tight">Whiteboard</span>
           </div>
-          
-          <div className="header-actions">
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="create-room-btn primary"
-            >
-              ➕ Nova Sala
-            </button>
-            
+          <div className="flex items-center gap-4">
             <button
               onClick={() => setShowJoinModal(true)}
-              className="join-room-btn secondary"
+              className="btn btn-ghost text-small"
             >
-              🚪 Entrar com Código
+              Entrar com Código
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn btn-primary text-small"
+            >
+              <Icons.Plus className="w-4 h-4" />
+              Nova Sala
             </button>
           </div>
         </div>
-      </header>
+      </nav>
+
+      {/* Hero Section */}
+      <div className="hero">
+        <h1 className="text-h1">Colaboração simplificada.</h1>
+        <p className="text-body">
+          Crie, desenhe e compartilhe ideias em tempo real com uma interface limpa e intuitiva.
+        </p>
+      </div>
 
       {/* Main Content */}
-      <main className="home-main">
-        <div className="main-content">
-          {/* Sidebar with stats and filters */}
-          <aside className="sidebar">
-           
-            
-            <div className="filters-section">
-              <h3>Filtros</h3>
-              
-              <SearchBar
-                value={filter.search}
-                onChange={(search) => setFilter(prev => ({ ...prev, search }))}
-                placeholder="Buscar salas..."
-              />
-              
-              
-              <div className="filter-options">
-                <label className="filter-option">
-                  <input
-                    type="checkbox"
-                    checked={filter.isPublicOnly}
-                    onChange={(e) => setFilter(prev => ({ 
-                      ...prev, 
-                      isPublicOnly: e.target.checked 
-                    }))}
-                  />
-                  Apenas salas públicas
-                </label>
-              </div>
-            </div>
-          </aside>
+      <main className="main-container">
+        <div className="card">
 
-          {/* Main room browser */}
-          <div className="rooms-section">
-            <div className="rooms-header">
-              <div className="rooms-title">
-                <h2>Salas Disponíveis</h2>
-                <span className="rooms-count">
-                  {filteredRooms.length} sala{filteredRooms.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              
-              <SortControls
-                sortBy={filter.sortBy}
-                sortOrder={filter.sortOrder}
-                onSortChange={(sortBy, sortOrder) => 
-                  setFilter(prev => ({ ...prev, sortBy, sortOrder }))
-                }
-              />
+          {/* Toolbar */}
+          <div className="toolbar">
+            <div className="flex items-center gap-4">
+              <h2 className="text-headline">Salas Recentes</h2>
+              <span className="bg-[var(--bg-secondary)] px-2 py-1 rounded-full text-small text-[var(--text-secondary)]">
+                {filteredRooms.length}
+              </span>
             </div>
 
-            {isLoading ? (
-              <div className="loading-state">
-                <div className="loading-spinner" />
-                <p>Carregando salas...</p>
+            <div className="flex items-center gap-3">
+              <div className="search-input-wrapper">
+                <div className="search-icon">
+                  <Icons.Search className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={filter.search}
+                  onChange={(e) => setFilter(prev => ({ ...prev, search: e.target.value }))}
+                  className="search-input"
+                />
               </div>
-            ) : error ? (
-              <div className="error-state">
-                <p>❌ Erro ao carregar salas: {error}</p>
-                <button onClick={refreshRooms} className="retry-btn">
-                  🔄 Tentar Novamente
+            </div>
+          </div>
+
+          {/* Room List */}
+          <div className="room-list-container">
+            {error ? (
+              <div className="empty-state text-red-500">
+                <p>Erro ao carregar salas: {error}</p>
+                <button onClick={refreshRooms} className="btn btn-ghost text-[var(--accent-blue)]">
+                  Tentar novamente
                 </button>
               </div>
-            ) : (
+            ) : isLoading ? (
+              <div className="empty-state">
+                <div className="animate-spin mb-4">
+                  <Icons.Grid className="w-8 h-8 opacity-50" />
+                </div>
+                <p>Carregando...</p>
+              </div>
+            ) : filteredRooms.length > 0 ? (
               <RoomBrowser
                 rooms={filteredRooms}
                 onJoinRoom={handleQuickJoin}
                 onDeleteRoom={handleDeleteRoom}
-                emptyState={
-                  <div className="empty-state">
-                    <div className="empty-icon">🏠</div>
-                    <h3>Nenhuma sala encontrada</h3>
-                    <p>
-                      {filter.search || filter.tags.length > 0 
-                        ? 'Tente ajustar os filtros ou criar uma nova sala.'
-                        : 'Seja o primeiro a criar uma sala!'
-                      }
-                    </p>
-                    <button
-                      onClick={() => setShowCreateModal(true)}
-                      className="create-first-room-btn"
-                    >
-                      ➕ Criar Primeira Sala
-                    </button>
-                  </div>
-                }
+                emptyState={null}
               />
+            ) : (
+              <div className="empty-state">
+                <div className="empty-icon">
+                  <Icons.Grid className="w-8 h-8" />
+                </div>
+                <h3 className="text-headline text-[var(--text-primary)] mb-2">Nenhuma sala encontrada</h3>
+                <p className="text-body mb-6">Comece criando uma nova sala para colaborar.</p>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="btn btn-ghost text-[var(--accent-blue)]"
+                >
+                  Criar sala agora
+                </button>
+              </div>
             )}
           </div>
         </div>
       </main>
-
-      {/* Quick Actions Footer */}
-      <footer className="home-footer">
-        <div className="footer-content">
-          <div className="quick-actions">
-            <h3>Ações Rápidas</h3>
-            <div className="quick-action-buttons">
-              <button
-                onClick={() => handleCreateRoom({
-                  name: `Sala Rápida ${new Date().getHours()}:${new Date().getMinutes()}`,
-                  description: 'Sala criada rapidamente para colaboração',
-                  isPublic: true,
-                  maxUsers: 10,
-                  tags: ['rápida'],
-                  settings: {
-                    allowDrawing: true,
-                    allowChat: true,
-                    allowExport: true,
-                    requireApproval: false,
-                    backgroundColor: '#ffffff',
-                    canvasSize: 'medium',
-                    enableGrid: false,
-                    enableRulers: false,
-                    autoSave: true,
-                    historyLimit: 20,
-                  }
-                })}
-                className="quick-action-btn"
-              >
-                ⚡ Sala Rápida
-              </button>
-              
-              <button
-                onClick={() => window.open('/whiteboard?roomId=demo', '_blank')}
-                className="quick-action-btn"
-              >
-                🎯 Modo Demo
-              </button>
-            </div>
-          </div>
-          
-          <div className="footer-info">
-            <p>&copy; 2024 Collaborative Whiteboard.</p>
-          </div>
-        </div>
-      </footer>
 
       {/* Modals */}
       {showCreateModal && (

@@ -15,7 +15,7 @@ export function getCorsOrigin(): string | string[] {
     // Default to common development URLs in development
     console.warn('⚠️  CORS_ORIGIN not set. Using default development origins.');
     console.warn('⚠️  For production, set CORS_ORIGIN to your client URL for security.');
-    return ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'];
+    return ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://192.168.1.2:5173'];
   }
 
   // Support multiple origins separated by comma

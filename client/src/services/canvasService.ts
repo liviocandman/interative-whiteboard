@@ -1,6 +1,7 @@
 // client/src/services/canvasService.ts
 import { socket } from './socket';
 import { debounce } from '../utils/throttle';
+import { floodFill } from './fillService';
 import type { Point, CanvasState, Stroke } from '../types';
 
 class CanvasService {
@@ -70,12 +71,21 @@ class CanvasService {
 
     strokes.forEach(stroke => {
       if (stroke?.from && stroke?.to) {
-        this.drawStroke(ctx, stroke);
+        this.drawStroke(canvas, stroke);
       }
     });
   }
 
-  private drawStroke(ctx: CanvasRenderingContext2D, stroke: Stroke): void {
+  private drawStroke(canvas: HTMLCanvasElement, stroke: Stroke): void {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Reutiliza a mesma lógica do desenho ao vivo para o balde
+    if (stroke.tool === 'bucket') {
+      floodFill(canvas, stroke.from, stroke.color);
+      return;
+    }
+
     ctx.save();
 
     ctx.strokeStyle = stroke.color;

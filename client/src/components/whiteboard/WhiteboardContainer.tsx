@@ -3,7 +3,6 @@ import { Whiteboard } from './Whiteboard';
 import { TopBar } from './TopBar';
 import { LeftSidebar } from './LeftSidebar';
 import { useWhiteboard } from '../../hooks/useWhiteboard';
-import { useHistory } from '../../hooks/useHistory';
 import type { Tool, User } from '../../types';
 import './WhiteboardContainer.css';
 
@@ -17,7 +16,7 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
   // State management
   const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState('#000000');
-  const [lineWidth] = useState(3);
+  const [lineWidth, setLineWidth] = useState(3);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -47,26 +46,13 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
     lineWidth,
   });
 
-  const {
-    saveState,
-    undo,
-    redo,
-  } = useHistory(canvasRef);
-
-  // Wrap onPointerDown to save state before drawing
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    saveState();
     originalOnPointerDown(e);
-  }, [saveState, originalOnPointerDown]);
+  }, [originalOnPointerDown]);
 
-  // Wrap onPointerUp to save state after drawing
   const onPointerUp = useCallback(() => {
     originalOnPointerUp();
-    // Small delay to ensure the drawing is complete before saving
-    setTimeout(() => {
-      saveState();
-    }, 50);
-  }, [saveState, originalOnPointerUp]);
+  }, [originalOnPointerUp]);
 
   // Handlers
   const handleToolChange = useCallback((newTool: Tool): void => {
@@ -101,9 +87,6 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
         users={allUsers}
         onExport={handleExport}
         isConnected={isConnected}
-        onReset={resetBoard}
-        onUndo={undo}
-        onRedo={redo}
       />
 
       <div className="whiteboard-content">
@@ -113,6 +96,9 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
           onToolChange={handleToolChange}
           color={color}
           onColorChange={setColor}
+          lineWidth={lineWidth}
+          onLineWidthChange={setLineWidth}
+        onReset={resetBoard}
         />
 
         {/* Main Canvas Area */}

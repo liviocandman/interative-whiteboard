@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { Icons } from '../ui/Icons';
 import type { User } from '../../types';
 import './TopBar.css';
@@ -9,9 +10,6 @@ interface TopBarProps {
   users: User[];
   onExport: () => void;
   isConnected: boolean;
-  onReset: () => void;
-  onUndo?: () => void;
-  onRedo?: () => void;
 }
 
 export function TopBar({
@@ -20,23 +18,22 @@ export function TopBar({
   users,
   onExport,
   isConnected,
-  onReset,
-  onUndo,
-  onRedo
 }: TopBarProps): ReactElement {
-  // Filter out current user from the list
-  const otherUsers = users.filter(user => user.id !== currentUser?.id);
+  // Ensure unique users and keep current user highlighted
+  const uniqueUsers = Array.from(
+    new Map(users.map(user => [user.id, user])).values()
+  );
 
   return (
     <div className="top-bar">
       {/* Left: Logo & Room Info */}
       <div className="top-bar__left">
-        <div className="logo-container">
+        <Link to="/" className="logo-container" title="Voltar para a Home">
           <div className="logo-icon">
             <Icons.Grid />
           </div>
           <span className="logo-text">Whiteboard</span>
-        </div>
+        </Link>
         <div className="room-info">
           <div className="room-info__content">
             <h1 className="room-info__title">
@@ -52,54 +49,22 @@ export function TopBar({
         </div>
       </div>
 
-      {/* Center: Actions */}
-      <div className="top-bar__center">
-        <button
-          onClick={onUndo}
-          className="action-btn"
-          title="Desfazer"
-        >
-          <Icons.Undo />
-        </button>
-        <button
-          onClick={onRedo}
-          className="action-btn"
-          title="Refazer"
-        >
-          <Icons.Redo />
-        </button>
-        <div className="action-divider" />
-        <button
-          onClick={onReset}
-          className="action-btn action-btn--danger"
-          title="Limpar tudo"
-        >
-          <Icons.Trash />
-        </button>
-      </div>
-
       {/* Right: Users & Share */}
       <div className="top-bar__right">
         <div className="user-avatar-group">
-          {otherUsers.map(user => (
+          {uniqueUsers.map(user => {
+            const isCurrent = user.id === currentUser?.id;
+            return (
             <div
               key={user.id}
-              className="user-avatar"
+              className={`user-avatar ${isCurrent ? 'user-avatar--current' : ''}`}
               style={{ backgroundColor: user.color }}
-              title={user.name}
+              title={isCurrent ? `${user.name} (Você)` : user.name}
             >
-              {user.name.charAt(0)}
+              {user.name?.charAt(0) || '?'}
             </div>
-          ))}
-          {currentUser && (
-            <div
-              className="user-avatar user-avatar--current"
-              style={{ backgroundColor: currentUser.color }}
-              title={`${currentUser.name} (Você)`}
-            >
-              {currentUser.name.charAt(0)}
-            </div>
-          )}
+          );
+          })}
         </div>
 
         <div className="top-bar__actions">

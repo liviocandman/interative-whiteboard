@@ -1,5 +1,5 @@
 // shared/types/index.ts
-export type Tool = 'pen' | 'eraser' | 'bucket' | 'line' | 'rectangle' | 'circle' | 'select';
+export type Tool = 'pen' | 'magicpen' | 'bucket' | 'eraser' | 'text' | 'select';
 
 export interface ToolConfig {
   id: Tool;
@@ -64,7 +64,7 @@ export interface CanvasState {
   strokes: Stroke[];
 }
 
-// Eventos do Socket
+// Socket Events
 export interface SocketEvents {
   // Client -> Server
   joinRoom: (roomId: string, ack?: (error?: string) => void) => void;
@@ -81,7 +81,7 @@ export interface SocketEvents {
   error: (error: { event: string; message: string }) => void;
 }
 
-// Configurações
+// Config
 export interface WhiteboardConfig {
   throttleMs: number;
   maxHistory: number;

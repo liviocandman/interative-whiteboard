@@ -148,4 +148,9 @@ export const Icons = {
       <path d="M14 3l7 7"></path>
     </svg>
   ),
+  StrokeWidth: (props: SVGProps<SVGSVGElement>) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="4" y1="12" x2="20" y2="12" strokeWidth="6"></line>
+    </svg>
+  ),
 };

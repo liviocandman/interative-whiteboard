@@ -452,6 +452,15 @@ body {
   color: var(--accent-blue);
 }
 
+.tool-btn--danger {
+  color: #dc2626;
+}
+
+.tool-btn--danger:hover {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
 .color-picker-trigger {
   width: 32px;
   height: 32px;

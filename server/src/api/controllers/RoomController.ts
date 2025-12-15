@@ -12,7 +12,7 @@ export class RoomController {
   async createRoom(req: Request, res: Response): Promise<void> {
     try {
       const data = req.body as CreateRoomRequest;
-      
+
       // Mock creator info (in production, get from auth)
       const createdBy = {
         id: 'user-' + Date.now(),
@@ -20,7 +20,7 @@ export class RoomController {
       };
 
       const room = await this.roomService.createRoom(data, createdBy);
-      
+
       res.status(201).json(room);
     } catch (error) {
       console.error('Error creating room:', error);
@@ -101,10 +101,10 @@ export class RoomController {
   async deleteRoom(req: Request, res: Response): Promise<void> {
     try {
       const { roomId } = req.params;
-      
+
       // TODO: Check if user is owner before deleting
       await this.roomService.deleteRoom(roomId);
-      
+
       res.status(204).send();
     } catch (error) {
       console.error('Error deleting room:', error);

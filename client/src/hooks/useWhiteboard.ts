@@ -20,8 +20,6 @@ interface UseWhiteboardReturn {
   onPointerUp: () => void;
   resetBoard: (callback?: (error?: string) => void) => void;
   isConnected: boolean;
-  undoStroke: () => void;
-  redoStroke: () => void;
 }
 
 export function useWhiteboard({
@@ -139,30 +137,6 @@ export function useWhiteboard({
     });
   }, [canvasRef]);
 
-  // Undo stroke via server
-  const undoStroke = useCallback((): void => {
-    console.log('[useWhiteboard] Requesting undo...');
-    socket.emit('undoStroke', (result: { success: boolean; strokeId?: string }) => {
-      if (result.success) {
-        console.log('[useWhiteboard] Undo successful');
-      } else {
-        console.log('[useWhiteboard] Nothing to undo');
-      }
-    });
-  }, []);
-
-  // Redo stroke via server
-  const redoStroke = useCallback((): void => {
-    console.log('[useWhiteboard] Requesting redo...');
-    socket.emit('redoStroke', (result: { success: boolean }) => {
-      if (result.success) {
-        console.log('[useWhiteboard] Redo successful');
-      } else {
-        console.log('[useWhiteboard] Nothing to redo');
-      }
-    });
-  }, []);
-
   // Setup dos event listeners do socket
   useEffect(() => {
     const handleConnect = (): void => {
@@ -237,37 +211,11 @@ export function useWhiteboard({
     return () => window.removeEventListener('resize', handleResize);
   }, [canvasRef]);
 
-  // Keyboard shortcuts for undo/redo
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      const isMod = e.ctrlKey || e.metaKey;
-      if (!isMod) return;
-
-      const key = e.key.toLowerCase();
-      if (key === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          redoStroke();
-        } else {
-          undoStroke();
-        }
-      } else if (key === 'y') {
-        e.preventDefault();
-        redoStroke();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStroke, redoStroke]);
-
   return {
     onPointerDown,
     onPointerMove,
     onPointerUp,
     resetBoard,
     isConnected,
-    undoStroke,
-    redoStroke,
   };
 }

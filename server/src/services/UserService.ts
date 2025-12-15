@@ -4,11 +4,19 @@ import { REDIS_KEYS, CONFIG } from '../types';
 import type { User, Point } from '../types';
 
 export class UserService {
+  private static instance: UserService;
   private redis: RedisService;
   private users = new Map<string, User>();
 
-  constructor() {
+  private constructor() {
     this.redis = RedisService.getInstance();
+  }
+
+  static getInstance(): UserService {
+    if (!UserService.instance) {
+      UserService.instance = new UserService();
+    }
+    return UserService.instance;
   }
 
   createUser(socketId: string, name: string, color: string, roomId?: string): User {

@@ -8,7 +8,7 @@ export class RoomSocketController {
 
   constructor() {
     this.roomService = new RoomService();
-    this.userService = new UserService();
+    this.userService = UserService.getInstance();
   }
 
   async handleJoinRoom(

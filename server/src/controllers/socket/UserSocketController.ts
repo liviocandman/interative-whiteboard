@@ -6,7 +6,7 @@ export class UserSocketController {
   private userService: UserService;
 
   constructor() {
-    this.userService = new UserService();
+    this.userService = UserService.getInstance();
   }
 
   handleUserSetup(socket: Socket, data: { name: string; color: string }): void {

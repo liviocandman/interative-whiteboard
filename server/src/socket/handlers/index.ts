@@ -14,7 +14,7 @@ export class SocketHandlers {
 
   constructor(private io: Server) {
     this.roomService = new RoomService();
-    this.userService = new UserService();
+    this.userService = UserService.getInstance();
     this.drawingService = new DrawingService(io);
     this.stateService = new StateService();
   }

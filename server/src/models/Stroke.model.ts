@@ -30,6 +30,25 @@ export class StrokeModel {
     // Validate or set timestamp
     const timestamp = stroke.timestamp || Date.now();
 
+    // Validate optional points array for magic pen
+    if (stroke.points !== undefined) {
+      if (!Array.isArray(stroke.points)) {
+        return null;
+      }
+      // Validate each point in the array
+      if (!stroke.points.every((p: any) => this.isValidPoint(p))) {
+        return null;
+      }
+    }
+
+    // Validate optional shapeType
+    if (stroke.shapeType !== undefined) {
+      const validShapeTypes = ['circle', 'rectangle', 'square', 'triangle'];
+      if (!validShapeTypes.includes(stroke.shapeType)) {
+        return null;
+      }
+    }
+
     return {
       from: stroke.from,
       to: stroke.to,
@@ -38,6 +57,8 @@ export class StrokeModel {
       tool: stroke.tool,
       timestamp,
       userId: stroke.userId,
+      ...(stroke.points && { points: stroke.points }),
+      ...(stroke.shapeType && { shapeType: stroke.shapeType }),
     };
   }
 
@@ -62,7 +83,7 @@ export class StrokeModel {
   }
 
   static isValidTool(tool: any): tool is Tool {
-    return tool === 'pen' || tool === 'eraser' || tool === 'bucket';
+    return tool === 'pen' || tool === 'eraser' || tool === 'bucket' || tool === 'magicpen';
   }
 
   static serialize(stroke: Stroke): string {

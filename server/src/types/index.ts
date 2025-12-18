@@ -50,7 +50,7 @@ export interface User {
   roomId?: string;
 }
 
-export type Tool = 'pen' | 'eraser' | 'bucket';
+export type Tool = 'pen' | 'magicpen' | 'eraser' | 'bucket';
 
 export interface Point {
   x: number;
@@ -65,6 +65,9 @@ export interface Stroke {
   tool: Tool;
   timestamp: number;
   userId?: string;
+  // For magic pen and shape tools - complete path rendering
+  points?: Point[];
+  shapeType?: 'circle' | 'rectangle' | 'square' | 'triangle';
 }
 
 export interface CanvasState {

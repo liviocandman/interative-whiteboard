@@ -4,6 +4,8 @@ import { socket } from '../services/socket';
 import { canvasService } from '../services/canvasService';
 import { drawingService } from '../services/drawingService';
 import { throttle } from '../utils/throttle';
+import { detectShape, getBoundingBox, getCentroid, smoothPoints } from '../utils/shapeDetection';
+import { generateCirclePoints, generateRectanglePoints, generateSquarePoints, generateTrianglePoints } from '../utils/shapeGeneration';
 import type { Stroke, Tool, Point, CanvasState } from '../types';
 
 interface UseWhiteboardProps {
@@ -31,6 +33,8 @@ export function useWhiteboard({
 }: UseWhiteboardProps): UseWhiteboardReturn {
   const isDrawing = useRef(false);
   const lastPoint = useRef<Point | null>(null);
+  const collectedPoints = useRef<Point[]>([]); // For magic pen
+  const canvasSnapshot = useRef<ImageData | null>(null); // Save canvas state for magic pen
   const [isConnected, setIsConnected] = useState(false);
 
   // Throttled drawing para performance
@@ -69,12 +73,22 @@ export function useWhiteboard({
       return;
     }
 
-    // Normal drawing tools
+    // Normal drawing tools (including magic pen)
     isDrawing.current = true;
     lastPoint.current = point;
 
+    // Initialize point collection for magic pen
+    if (tool === 'magicpen') {
+      collectedPoints.current = [point];
+      // Save canvas state before drawing rough preview
+      const ctx = canvasService.getContext(canvasRef.current);
+      if (ctx) {
+        canvasSnapshot.current = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
+
     drawingService.startDrawing(canvasRef.current, {
-      tool,
+      tool: tool === 'magicpen' ? 'pen' : tool, // Draw as pen initially
       color,
       lineWidth,
       point: lastPoint.current,
@@ -88,23 +102,32 @@ export function useWhiteboard({
 
     const currentPoint = canvasService.getPointFromEvent(e);
 
+    // Collect points for magic pen
+    if (tool === 'magicpen') {
+      collectedPoints.current.push(currentPoint);
+    }
+
     drawingService.continueDrawing(canvasRef.current, currentPoint, {
-      tool,
+      tool: tool === 'magicpen' ? 'pen' : tool, // Draw as pen initially
       color,
       lineWidth,
       point: currentPoint,
     });
 
-    const stroke: Stroke = {
-      from: lastPoint.current,
-      to: currentPoint,
-      color,
-      lineWidth,
-      tool,
-      timestamp: Date.now(),
-    };
+    // Only emit strokes for non-magic pen tools
+    // Magic pen will emit the perfect shape on mouseup
+    if (tool !== 'magicpen') {
+      const stroke: Stroke = {
+        from: lastPoint.current,
+        to: currentPoint,
+        color,
+        lineWidth,
+        tool,
+        timestamp: Date.now(),
+      };
 
-    throttledDraw.current(stroke);
+      throttledDraw.current(stroke);
+    }
 
     lastPoint.current = currentPoint;
   }, [color, lineWidth, tool, canvasRef]);
@@ -114,11 +137,82 @@ export function useWhiteboard({
 
     if (!isDrawing.current || !canvasRef.current) return;
 
+    // Magic pen: detect shape and transform
+    if (tool === 'magicpen' && collectedPoints.current.length > 0) {
+      console.log('[Magic Pen] Collected points:', collectedPoints.current.length);
+
+      const smoothed = smoothPoints(collectedPoints.current, 3);
+      const shapeType = detectShape(smoothed);
+
+      console.log('[Magic Pen] Detected shape:', shapeType);
+
+      const box = getBoundingBox(smoothed);
+      let perfectPoints: Point[] = [];
+
+      // Generate perfect shape points based on detected type
+      switch (shapeType) {
+        case 'circle': {
+          const center = getCentroid(smoothed);
+          const radius = Math.max(box.width, box.height) / 2;
+          perfectPoints = generateCirclePoints(center, radius, 60);
+          break;
+        }
+        case 'rectangle':
+          perfectPoints = generateRectanglePoints(box);
+          break;
+        case 'square':
+          perfectPoints = generateSquarePoints(box);
+          break;
+        case 'triangle':
+          perfectPoints = generateTrianglePoints(smoothed, box);
+          break;
+        default:
+          // Fallback to circle if somehow unknown
+          const center = getCentroid(smoothed);
+          const radius = Math.max(box.width, box.height) / 2;
+          perfectPoints = generateCirclePoints(center, radius, 60);
+      }
+
+      // Always emit perfect shape
+      if (perfectPoints.length > 0) {
+        console.log('[Magic Pen] Emitting perfect', shapeType, 'with', perfectPoints.length, 'points');
+
+        // Restore canvas to state before rough drawing
+        if (canvasSnapshot.current) {
+          const ctx = canvasService.getContext(canvasRef.current);
+          if (ctx) {
+            ctx.putImageData(canvasSnapshot.current, 0, 0);
+          }
+        }
+
+        const perfectStroke: Stroke = {
+          from: perfectPoints[0],
+          to: perfectPoints[perfectPoints.length - 1],
+          color,
+          lineWidth,
+          tool: 'magicpen',
+          points: perfectPoints,
+          shapeType: shapeType === 'unknown' ? 'circle' : shapeType,
+          timestamp: Date.now(),
+        };
+
+        // Draw perfect shape locally
+        drawingService.applyStroke(canvasRef.current, perfectStroke);
+
+        // Emit perfect shape to server (will be broadcast to all including sender)
+        socket.emit('drawing', perfectStroke);
+      }
+
+      // Reset canvas snapshot and collected points
+      canvasSnapshot.current = null;
+      collectedPoints.current = [];
+    }
+
     isDrawing.current = false;
     lastPoint.current = null;
 
     drawingService.finishDrawing(canvasRef.current);
-  }, [canvasRef, tool]);
+  }, [canvasRef, tool, color, lineWidth]);
 
   // Reset do quadro
   const resetBoard = useCallback((callback?: (error?: string) => void): void => {

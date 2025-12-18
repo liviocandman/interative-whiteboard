@@ -1,6 +1,16 @@
 import type { SVGProps } from 'react';
 
 export const Icons = {
+  MagicWand: (props: SVGProps<SVGSVGElement>) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 21L10.5 13.5M10.5 13.5L12 12L13.5 10.5M10.5 13.5L12 15L13.5 16.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 9L16.5 7.5L18 6L19.5 4.5L21 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="18" cy="6" r="1.5" fill="currentColor" />
+      <path d="M15 3L15 5M15 4L13 4M15 4L17 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M20 9L20 11M20 10L18 10M20 10L22 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M6 6L6 8M6 7L4 7M6 7L8 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
   Plus: (props: SVGProps<SVGSVGElement>) => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <line x1="12" y1="5" x2="12" y2="19"></line>

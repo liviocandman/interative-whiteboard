@@ -44,6 +44,9 @@ export interface Stroke {
   lineWidth: number;
   tool: Tool;
   timestamp?: number;
+  // For magic pen and shape tools - complete path rendering
+  points?: Point[];
+  shapeType?: 'circle' | 'rectangle' | 'square' | 'triangle';
 }
 
 export interface DrawingState {

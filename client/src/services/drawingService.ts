@@ -67,6 +67,21 @@ class DrawingService {
     ctx.globalCompositeOperation =
       stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
 
+    // Handle path-based strokes (magic pen with points array)
+    if (stroke.points && stroke.points.length > 0) {
+      ctx.beginPath();
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      }
+
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    // Handle traditional point-to-point strokes
     ctx.beginPath();
     ctx.moveTo(stroke.from.x, stroke.from.y);
     ctx.lineTo(stroke.to.x, stroke.to.y);

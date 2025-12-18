@@ -40,6 +40,7 @@ export function LeftSidebar({
   }, []);
   const tools = [
     { id: 'pen', icon: Icons.Pen, label: 'Caneta' },
+    { id: 'magicpen', icon: Icons.MagicWand, label: 'Caneta Mágica' },
     { id: 'eraser', icon: Icons.Eraser, label: 'Borracha' },
     { id: 'bucket', icon: Icons.Fill, label: 'Preencher' },
     { id: 'shapes', icon: Icons.Shapes, label: 'Formas' },

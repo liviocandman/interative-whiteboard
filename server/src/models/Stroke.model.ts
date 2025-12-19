@@ -87,13 +87,29 @@ export class StrokeModel {
   }
 
   static serialize(stroke: Stroke): string {
-    return JSON.stringify(stroke);
+    const serialized = JSON.stringify(stroke);
+    if (stroke.tool === 'magicpen') {
+      console.log('[StrokeModel] Serializing magic pen stroke:', {
+        hasPoints: !!stroke.points,
+        pointsLength: stroke.points?.length,
+        shapeType: stroke.shapeType
+      });
+    }
+    return serialized;
   }
 
   static deserialize(data: string): Stroke | null {
     try {
       const parsed = JSON.parse(data);
-      return this.validate(parsed);
+      const validated = this.validate(parsed);
+      if (validated && validated.tool === 'magicpen') {
+        console.log('[StrokeModel] Deserialized magic pen stroke:', {
+          hasPoints: !!validated.points,
+          pointsLength: validated.points?.length,
+          shapeType: validated.shapeType
+        });
+      }
+      return validated;
     } catch {
       return null;
     }

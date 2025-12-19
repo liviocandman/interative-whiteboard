@@ -80,7 +80,7 @@ class CanvasService {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Reutiliza a mesma lógica do desenho ao vivo para o balde
+    // Handle bucket tool
     if (stroke.tool === 'bucket') {
       floodFill(canvas, stroke.from, stroke.color);
       return;
@@ -97,10 +97,21 @@ class CanvasService {
       stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
 
     ctx.beginPath();
-    ctx.moveTo(stroke.from.x, stroke.from.y);
-    ctx.lineTo(stroke.to.x, stroke.to.y);
-    ctx.stroke();
 
+    // Handle path-based strokes (magic pen shapes)
+    if (stroke.points && stroke.points.length > 0) {
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      }
+      console.log('[canvasService] Rendering magic pen stroke:', stroke.shapeType, 'with', stroke.points.length, 'points');
+    } else {
+      // Traditional point-to-point stroke
+      ctx.moveTo(stroke.from.x, stroke.from.y);
+      ctx.lineTo(stroke.to.x, stroke.to.y);
+    }
+
+    ctx.stroke();
     ctx.restore();
   }
 

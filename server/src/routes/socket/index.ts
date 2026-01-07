@@ -16,7 +16,7 @@ export function setupSocketRoutes(io: Server): void {
     console.log(`[Socket] Client connected: ${socket.id}`);
 
     // User setup
-    socket.on('userSetup', (data: { name: string; color: string }) => {
+    socket.on('userSetup', (data: { userId: string; name: string; color: string }) => {
       userController.handleUserSetup(socket, data);
     });
 
@@ -42,6 +42,17 @@ export function setupSocketRoutes(io: Server): void {
 
     socket.on('resetBoard', (callback?: (error?: string) => void) => {
       drawingController.handleResetBoard(socket, callback);
+    });
+
+    // Undo/Redo events
+    socket.on('undoStroke', async (callback?: (result: { success: boolean; strokeId?: string }) => void) => {
+      console.log('[Socket] undoStroke event received from:', socket.id);
+      await drawingController.handleUndoStroke(socket, callback);
+    });
+
+    socket.on('redoStroke', async (callback?: (result: { success: boolean }) => void) => {
+      console.log('[Socket] redoStroke event received from:', socket.id);
+      await drawingController.handleRedoStroke(socket, callback);
     });
 
     // User interaction events

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { RoomService } from '../../services/room/RoomService';
+import { RoomService } from '../../services/RoomService';
 import type { CreateRoomRequest, RoomFilter, JoinRoomRequest } from '../../types';
 
 export class RoomController {

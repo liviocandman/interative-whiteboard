@@ -12,6 +12,9 @@ interface LeftSidebarProps {
   lineWidth: number;
   onLineWidthChange: (width: number) => void;
   onReset: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canDraw?: boolean; // Optional for backward compatibility
 }
 
 export function LeftSidebar({
@@ -22,6 +25,9 @@ export function LeftSidebar({
   lineWidth,
   onLineWidthChange,
   onReset,
+  onUndo,
+  onRedo,
+  canDraw = true, // Default to true
 }: LeftSidebarProps): ReactElement {
   const [isStrokeWidthOpen, setIsStrokeWidthOpen] = useState(false);
   const strokeWidthRef = useRef<HTMLDivElement>(null);
@@ -43,21 +49,45 @@ export function LeftSidebar({
     { id: 'magicpen', icon: Icons.MagicWand, label: 'Caneta Mágica' },
     { id: 'eraser', icon: Icons.Eraser, label: 'Borracha' },
     { id: 'bucket', icon: Icons.Fill, label: 'Preencher' },
-    { id: 'shapes', icon: Icons.Shapes, label: 'Formas' },
   ];
 
   return (
     <div className="floating-sidebar">
+      {/* Warning icon if drawing is disabled */}
+      {!canDraw && (
+        <div
+          style={{
+            width: '40px',
+            height: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.25rem',
+            backgroundColor: '#fee2e2',
+            color: '#dc2626',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: '0.5rem',
+            cursor: 'help'
+          }}
+          title="Drawing is disabled in this room"
+        >
+          🔒
+        </div>
+      )}
+
       {tools.map((tool) => {
         const Icon = tool.icon;
         const isActive = currentTool === tool.id;
+        const isDisabled = !canDraw && tool.id !== 'select';
 
         return (
           <button
             key={tool.id}
             onClick={() => onToolChange(tool.id as Tool)}
-            className={`tool-btn ${isActive ? 'active' : ''}`}
-            title={tool.label}
+            className={`tool-btn ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+            title={isDisabled ? `${tool.label} (Disabled)` : tool.label}
+            disabled={isDisabled}
+            style={isDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
           >
             <Icon />
           </button>
@@ -67,32 +97,37 @@ export function LeftSidebar({
 
       <div className="tool-divider" />
 
-      <div className="color-picker">
+      {/* Color Picker */}
+      <div className="color-picker" style={!canDraw ? { opacity: 0.5, pointerEvents: 'none' } : undefined}>
         <div
           className="color-picker-trigger"
           style={{ backgroundColor: color }}
-          title="Cor atual"
+          title={canDraw ? "Cor atual" : "Color picker (Disabled)"}
         />
         <input
           type="color"
           value={color}
           onChange={(e) => onColorChange(e.target.value)}
           className="color-picker-input"
+          disabled={!canDraw}
         />
       </div>
 
       <div className="tool-divider" />
 
+      {/* Stroke Width */}
       <div className="stroke-width-container" ref={strokeWidthRef} style={{ position: 'relative' }}>
         <button
-          onClick={() => setIsStrokeWidthOpen(!isStrokeWidthOpen)}
+          onClick={() => canDraw && setIsStrokeWidthOpen(!isStrokeWidthOpen)}
           className={`tool-btn ${isStrokeWidthOpen ? 'active' : ''}`}
-          title="Espessura do traço"
+          title={canDraw ? "Espessura do traço" : "Stroke width (Disabled)"}
+          disabled={!canDraw}
+          style={!canDraw ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
         >
           <Icons.StrokeWidth />
         </button>
 
-        {isStrokeWidthOpen && (
+        {isStrokeWidthOpen && canDraw && (
           <div className="stroke-width-popover" style={{
             position: 'absolute',
             left: '100%',
@@ -118,10 +153,35 @@ export function LeftSidebar({
 
       <div className="tool-divider" />
 
+      {/* Undo/Redo Buttons */}
+      <button
+        onClick={onUndo}
+        className="tool-btn"
+        title={canDraw ? "Desfazer (Ctrl+Z)" : "Undo (Disabled)"}
+        disabled={!canDraw}
+        style={!canDraw ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+      >
+        <Icons.Undo />
+      </button>
+      <button
+        onClick={onRedo}
+        className="tool-btn"
+        title={canDraw ? "Refazer (Ctrl+Y)" : "Redo (Disabled)"}
+        disabled={!canDraw}
+        style={!canDraw ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+      >
+        <Icons.Redo />
+      </button>
+
+      <div className="tool-divider" />
+
+      {/* Reset Button */}
       <button
         onClick={onReset}
         className="tool-btn tool-btn--danger"
-        title="Limpar quadro"
+        title={canDraw ? "Limpar quadro" : "Clear board (Disabled)"}
+        disabled={!canDraw}
+        style={!canDraw ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
       >
         <Icons.Trash />
       </button>

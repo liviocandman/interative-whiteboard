@@ -10,6 +10,7 @@ interface TopBarProps {
   users: User[];
   onExport: () => void;
   isConnected: boolean;
+  canExport?: boolean; // Optional for backward compatibility
 }
 
 export function TopBar({
@@ -18,6 +19,7 @@ export function TopBar({
   users,
   onExport,
   isConnected,
+  canExport = true, // Default to true
 }: TopBarProps): ReactElement {
   // Ensure unique users and keep current user highlighted
   const uniqueUsers = Array.from(
@@ -55,20 +57,26 @@ export function TopBar({
           {uniqueUsers.map(user => {
             const isCurrent = user.id === currentUser?.id;
             return (
-            <div
-              key={user.id}
-              className={`user-avatar ${isCurrent ? 'user-avatar--current' : ''}`}
-              style={{ backgroundColor: user.color }}
-              title={isCurrent ? `${user.name} (Você)` : user.name}
-            >
-              {user.name?.charAt(0) || '?'}
-            </div>
-          );
+              <div
+                key={user.id}
+                className={`user-avatar ${isCurrent ? 'user-avatar--current' : ''}`}
+                style={{ backgroundColor: user.color }}
+                title={isCurrent ? `${user.name} (Você)` : user.name}
+              >
+                {user.name?.charAt(0) || '?'}
+              </div>
+            );
           })}
         </div>
 
         <div className="top-bar__actions">
-          <button onClick={onExport} className="btn btn-secondary text-small">
+          <button
+            onClick={onExport}
+            className="btn btn-secondary text-small"
+            disabled={!canExport}
+            title={canExport ? "Export whiteboard as image" : "Export is disabled in this room"}
+            style={!canExport ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+          >
             <Icons.Download />
           </button>
           <button className="btn btn-primary text-small">

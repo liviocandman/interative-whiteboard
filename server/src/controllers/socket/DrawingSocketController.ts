@@ -113,6 +113,50 @@ export class DrawingSocketController {
     }
   }
 
+  async handleUndoStroke(
+    socket: Socket,
+    callback?: (result: { success: boolean; strokeId?: string }) => void
+  ): Promise<void> {
+    console.log('[DrawingController] handleUndoStroke called for socket:', socket.id);
+    try {
+      const currentRoom = this.getCurrentRoom(socket);
+      console.log('[DrawingController] currentRoom:', currentRoom);
+      if (!currentRoom) {
+        console.log('[DrawingController] No room found, returning false');
+        callback?.({ success: false });
+        return;
+      }
+
+      console.log('[DrawingController] Calling drawingService.undoStroke...');
+      const result = await this.drawingService.undoStroke(currentRoom, socket.id);
+      console.log('[DrawingController] undoStroke result:', result);
+      callback?.(result);
+    } catch (error) {
+      console.error('[DrawingController] Error undoing stroke:', error);
+      callback?.({ success: false });
+    }
+  }
+
+  async handleRedoStroke(
+    socket: Socket,
+    callback?: (result: { success: boolean }) => void
+  ): Promise<void> {
+    console.log('[DrawingController] handleRedoStroke called for socket:', socket.id);
+    try {
+      const currentRoom = this.getCurrentRoom(socket);
+      if (!currentRoom) {
+        callback?.({ success: false });
+        return;
+      }
+
+      const result = await this.drawingService.redoStroke(currentRoom, socket.id);
+      callback?.(result);
+    } catch (error) {
+      console.error('[DrawingController] Error redoing stroke:', error);
+      callback?.({ success: false });
+    }
+  }
+
   private getCurrentRoom(socket: Socket): string | undefined {
     const rooms = Array.from(socket.rooms);
     return rooms.find(room => room !== socket.id);

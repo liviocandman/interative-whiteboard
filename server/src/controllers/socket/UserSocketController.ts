@@ -9,10 +9,15 @@ export class UserSocketController {
     this.userService = UserService.getInstance();
   }
 
-  handleUserSetup(socket: Socket, data: { name: string; color: string }): void {
+  handleUserSetup(socket: Socket, data: { userId: string; name: string; color: string }): void {
     try {
-      const user = this.userService.createUser(socket.id, data.name, data.color);
-      console.log(`[Socket] User setup: ${user.name} (${socket.id})`);
+      const { user, isReconnection } = this.userService.createOrUpdateUser(
+        data.userId,
+        socket.id,
+        data.name,
+        data.color
+      );
+      console.log(`[Socket] User setup: ${user.name} (userId: ${data.userId}, socket: ${socket.id}, reconnection: ${isReconnection})`);
     } catch (error) {
       console.error('[Socket] Error in user setup:', error);
       socket.emit('error', {
@@ -29,7 +34,7 @@ export class UserSocketController {
       if (!user || !user.roomId) return;
 
       socket.to(user.roomId).emit('cursorMove', {
-        userId: socket.id,
+        userId: user.id,
         position,
       });
     } catch (error) {
@@ -43,7 +48,7 @@ export class UserSocketController {
       if (!user || !user.roomId) return;
 
       socket.to(user.roomId).emit('drawingState', {
-        userId: socket.id,
+        userId: user.id,
         isDrawing,
       });
     } catch (error) {
@@ -53,8 +58,7 @@ export class UserSocketController {
 
   handleDisconnect(socket: Socket): void {
     try {
-      this.userService.removeUser(socket.id);
-      console.log(`[Socket] User removed: ${socket.id}`);
+      this.userService.removeUserBySocketId(socket.id);
     } catch (error) {
       console.error('[Socket] Error removing user:', error);
     }

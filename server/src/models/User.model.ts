@@ -1,9 +1,9 @@
 import type { User, Point } from '../types';
 
 export class UserModel {
-  static createUser(socketId: string, name: string, color: string, roomId?: string): User {
+  static createUser(userId: string, name: string, color: string, roomId?: string): User {
     return {
-      id: socketId,
+      id: userId,
       name: this.sanitizeName(name),
       color: this.validateColor(color),
       cursor: { x: 0, y: 0 },

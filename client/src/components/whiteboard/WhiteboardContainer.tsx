@@ -4,15 +4,38 @@ import { TopBar } from './TopBar';
 import { LeftSidebar } from './LeftSidebar';
 import { useWhiteboard } from '../../hooks/useWhiteboard';
 import type { Tool, User } from '../../types';
+import type { Room, RoomSettings } from '../../types/room';
 import './WhiteboardContainer.css';
+
+// Default settings if room fetch fails
+const DEFAULT_SETTINGS: RoomSettings = {
+  allowDrawing: true,
+  allowChat: false,
+  allowExport: true,
+  requireApproval: false,
+  backgroundColor: '#ffffff',
+  canvasSize: 'large',
+  enableGrid: false,
+  enableRulers: false,
+  autoSave: true,
+  historyLimit: 50,
+};
 
 interface WhiteboardContainerProps {
   roomId?: string;
   currentUser: User | null;
   otherUsers: User[];
+  room: Room | null;
+  roomError?: string | null;
 }
 
-export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUsers }: WhiteboardContainerProps) {
+export function WhiteboardContainer({
+  roomId: propRoomId,
+  currentUser,
+  otherUsers,
+  room,
+  roomError,
+}: WhiteboardContainerProps) {
   // State management
   const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState('#000000');
@@ -27,9 +50,27 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
     return params.get('roomId') || `room-${Date.now()}`;
   }, [propRoomId]);
 
+  // Get settings from room or use defaults
+  const settings = room?.settings || DEFAULT_SETTINGS;
+
+  // Permission checks
+  const canDraw = useMemo(() => {
+    if (!settings.allowDrawing) {
+      // If drawing is disabled, only the owner can draw
+      if (!currentUser || !room) return false;
+      return currentUser.id === room.createdBy.id;
+    }
+    return true;
+  }, [settings.allowDrawing, currentUser, room]);
+
+  const canExport = settings.allowExport;
+
   // Log users for debugging
   console.log('WhiteboardContainer - currentUser:', currentUser);
   console.log('WhiteboardContainer - otherUsers:', otherUsers);
+  console.log('WhiteboardContainer - room:', room);
+  console.log('WhiteboardContainer - canDraw:', canDraw);
+  console.log('WhiteboardContainer - canExport:', canExport);
 
   // Hooks
   const {
@@ -37,11 +78,13 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
     onPointerMove,
     onPointerUp: originalOnPointerUp,
     resetBoard,
+    undo,
+    redo,
     isConnected,
   } = useWhiteboard({
     roomId,
     canvasRef,
-    tool,
+    tool: canDraw ? tool : 'select', // Force select tool if can't draw
     color,
     lineWidth,
   });
@@ -56,10 +99,19 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
 
   // Handlers
   const handleToolChange = useCallback((newTool: Tool): void => {
+    if (!canDraw && newTool !== 'select') {
+      alert('Drawing is disabled in this room');
+      return;
+    }
     setTool(newTool);
-  }, []);
+  }, [canDraw]);
 
   const handleExport = useCallback((): void => {
+    if (!canExport) {
+      alert('Export is disabled in this room');
+      return;
+    }
+
     if (!canvasRef.current) return;
 
     try {
@@ -69,9 +121,9 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
       link.click();
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Falha ao exportar a imagem.');
+      alert('Failed to export image.');
     }
-  }, [roomId]);
+  }, [roomId, canExport]);
 
   // Combine current user and other users for TopBar
   const allUsers = currentUser ? [currentUser, ...otherUsers] : otherUsers;
@@ -80,6 +132,20 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
 
   return (
     <div className="whiteboard-layout">
+      {/* Error banner if room fetch failed */}
+      {roomError && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          backgroundColor: '#fef3c7',
+          color: '#92400e',
+          borderBottom: '1px solid #fcd34d',
+          fontSize: '0.875rem',
+          textAlign: 'center'
+        }}>
+          ⚠️ {roomError} - Using default settings
+        </div>
+      )}
+
       {/* Top Navigation */}
       <TopBar
         roomId={roomId}
@@ -87,6 +153,7 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
         users={allUsers}
         onExport={handleExport}
         isConnected={isConnected}
+        canExport={canExport}
       />
 
       <div className="whiteboard-content">
@@ -98,7 +165,10 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
           onColorChange={setColor}
           lineWidth={lineWidth}
           onLineWidthChange={setLineWidth}
-        onReset={resetBoard}
+          onReset={resetBoard}
+          onUndo={undo}
+          onRedo={redo}
+          canDraw={canDraw}
         />
 
         {/* Main Canvas Area */}
@@ -110,6 +180,7 @@ export function WhiteboardContainer({ roomId: propRoomId, currentUser, otherUser
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               currentTool={tool}
+              settings={settings}
             />
           </div>
         </div>

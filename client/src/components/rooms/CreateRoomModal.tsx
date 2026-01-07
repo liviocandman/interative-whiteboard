@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS: RoomSettings = {
   allowExport: true,
   requireApproval: false,
   backgroundColor: '#ffffff',
-  canvasSize: 'medium',
+  canvasSize: 'large',
   enableGrid: false,
   enableRulers: false,
   autoSave: true,

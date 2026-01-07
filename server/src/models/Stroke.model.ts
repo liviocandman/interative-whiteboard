@@ -57,6 +57,7 @@ export class StrokeModel {
       tool: stroke.tool,
       timestamp,
       userId: stroke.userId,
+      ...(stroke.strokeId && { strokeId: stroke.strokeId }),
       ...(stroke.points && { points: stroke.points }),
       ...(stroke.shapeType && { shapeType: stroke.shapeType }),
     };

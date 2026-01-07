@@ -44,6 +44,8 @@ export interface Stroke {
   lineWidth: number;
   tool: Tool;
   timestamp?: number;
+  // Unique ID per drawing gesture (pointerdown to pointerup) for undo grouping
+  strokeId?: string;
   // For magic pen and shape tools - complete path rendering
   points?: Point[];
   shapeType?: 'circle' | 'rectangle' | 'square' | 'triangle';

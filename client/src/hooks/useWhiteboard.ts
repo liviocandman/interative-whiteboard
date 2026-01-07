@@ -21,6 +21,8 @@ interface UseWhiteboardReturn {
   onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void;
   onPointerUp: () => void;
   resetBoard: (callback?: (error?: string) => void) => void;
+  undo: () => void;
+  redo: () => void;
   isConnected: boolean;
 }
 
@@ -35,6 +37,7 @@ export function useWhiteboard({
   const lastPoint = useRef<Point | null>(null);
   const collectedPoints = useRef<Point[]>([]); // For magic pen
   const canvasSnapshot = useRef<ImageData | null>(null); // Save canvas state for magic pen
+  const currentStrokeId = useRef<string | null>(null); // Unique ID per drawing gesture for undo
   const [isConnected, setIsConnected] = useState(false);
 
   // Throttled drawing para performance
@@ -56,6 +59,9 @@ export function useWhiteboard({
 
     const point = canvasService.getPointFromEvent(e);
 
+    // Generate a unique strokeId for this drawing gesture
+    currentStrokeId.current = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     // Handle bucket tool differently - it's a one-click operation
     if (tool === 'bucket') {
       const stroke: Stroke = {
@@ -65,6 +71,7 @@ export function useWhiteboard({
         lineWidth,
         tool,
         timestamp: Date.now(),
+        strokeId: currentStrokeId.current,
       };
 
       applyStroke(stroke);
@@ -124,6 +131,7 @@ export function useWhiteboard({
         lineWidth,
         tool,
         timestamp: Date.now(),
+        strokeId: currentStrokeId.current || undefined,
       };
 
       throttledDraw.current(stroke);
@@ -194,6 +202,7 @@ export function useWhiteboard({
           points: perfectPoints,
           shapeType: shapeType === 'unknown' ? 'circle' : shapeType,
           timestamp: Date.now(),
+          strokeId: currentStrokeId.current || undefined,
         };
 
         // Draw perfect shape locally
@@ -305,11 +314,71 @@ export function useWhiteboard({
     return () => window.removeEventListener('resize', handleResize);
   }, [canvasRef]);
 
+  // Undo function
+  const undo = useCallback((): void => {
+    console.log('[useWhiteboard] Undoing... Socket connected:', socket.connected, 'Socket ID:', socket.id);
+    if (!socket.connected) {
+      console.error('[useWhiteboard] Cannot undo: socket not connected');
+      return;
+    }
+    socket.emit('undoStroke', (result: { success: boolean; strokeId?: string }) => {
+      console.log('[useWhiteboard] Undo callback received:', result);
+      if (result.success) {
+        console.log('[useWhiteboard] Undo successful');
+      } else {
+        console.log('[useWhiteboard] Nothing to undo');
+      }
+    });
+  }, []);
+
+  // Redo function
+  const redo = useCallback((): void => {
+    console.log('[useWhiteboard] Redoing...');
+    socket.emit('redoStroke', (result: { success: boolean }) => {
+      if (result.success) {
+        console.log('[useWhiteboard] Redo successful');
+      } else {
+        console.log('[useWhiteboard] Nothing to redo');
+      }
+    });
+  }, []);
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      // Ignore if user is typing in an input or textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Ctrl+Z for Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+
+      // Ctrl+Y or Ctrl+Shift+Z for Redo
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [undo, redo]);
+
   return {
     onPointerDown,
     onPointerMove,
     onPointerUp,
     resetBoard,
+    undo,
+    redo,
     isConnected,
   };
 }

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { socket } from '../services/socket';
+import { getPersistentUserId } from '../utils/user';
 import type { User, Point } from '../types';
 
 interface UseUsersReturn {
@@ -17,7 +18,8 @@ export function useUsers(): UseUsersReturn {
   const [isSettingUp, setIsSettingUp] = useState(true);
 
   const setupUser = useCallback((name: string, color: string): void => {
-    console.log('[useUsers] setupUser called with:', { name, color, socketId: socket.id, connected: socket.connected });
+    const persistentUserId = getPersistentUserId();
+    console.log('[useUsers] setupUser called with:', { name, color, persistentUserId, socketId: socket.id, connected: socket.connected });
 
     // Ensure socket is connected
     if (!socket.connected) {
@@ -34,7 +36,7 @@ export function useUsers(): UseUsersReturn {
       }
 
       const user: User = {
-        id: socket.id,
+        id: persistentUserId,
         name,
         color,
         cursor: { x: 0, y: 0 },
@@ -47,9 +49,9 @@ export function useUsers(): UseUsersReturn {
       setCurrentUser(user);
       setIsSettingUp(false);
 
-      // Enviar dados do usuário para o servidor
+      // Send user data to server with persistent userId
       console.log('[useUsers] Emitting userSetup to server');
-      socket.emit('userSetup', { name, color });
+      socket.emit('userSetup', { userId: persistentUserId, name, color });
     };
 
     createUser();

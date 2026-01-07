@@ -58,6 +58,7 @@ export class DrawingService {
 
   /**
    * Undo last stroke for a user
+   * Removes all stroke segments with the same strokeId (entire drawing gesture)
    */
   async undoStroke(roomId: string, userId: string): Promise<{ success: boolean; strokeId?: string }> {
     try {
@@ -79,23 +80,41 @@ export class DrawingService {
       }
 
       const undoneStroke = strokes[lastUserStrokeIndex];
+      const strokeIdToRemove = undoneStroke.strokeId;
 
-      // Store undone stroke for potential redo
-      this.addToUndoStack(roomId, userId, {
-        stroke: undoneStroke,
-        index: lastUserStrokeIndex
+      // Find all strokes with the same strokeId (entire drawing gesture)
+      let strokesToUndo: typeof strokes = [];
+      if (strokeIdToRemove) {
+        strokesToUndo = strokes.filter(s => s.strokeId === strokeIdToRemove && s.userId === userId);
+      } else {
+        // If no strokeId, just remove the single stroke (legacy behavior)
+        strokesToUndo = [undoneStroke];
+      }
+
+      // Store undone strokes for potential redo
+      for (const stroke of strokesToUndo) {
+        this.addToUndoStack(roomId, userId, {
+          stroke,
+          index: strokes.indexOf(stroke)
+        });
+      }
+
+      // Remove all strokes with the same strokeId from Redis and rebuild
+      const newStrokes = strokes.filter(s => {
+        if (strokeIdToRemove) {
+          return !(s.strokeId === strokeIdToRemove && s.userId === userId);
+        }
+        return s !== undoneStroke;
       });
 
-      // Remove the stroke from Redis and rebuild
-      const newStrokes = strokes.filter((_, i) => i !== lastUserStrokeIndex);
       await this.rebuildStrokes(roomId, newStrokes);
 
       // Broadcast the updated state to all users in the room
       const newState = await this.getInitialState(roomId);
       this.io.to(roomId).emit('initialState', newState);
 
-      console.log(`[DrawingService] Undo successful for user ${userId} in room ${roomId}`);
-      return { success: true, strokeId: `${undoneStroke.timestamp}` };
+      console.log(`[DrawingService] Undo successful for user ${userId} in room ${roomId}. Removed ${strokesToUndo.length} stroke segments.`);
+      return { success: true, strokeId: strokeIdToRemove || `${undoneStroke.timestamp}` };
     } catch (error) {
       console.error('[DrawingService] Undo failed:', error);
       return { success: false };

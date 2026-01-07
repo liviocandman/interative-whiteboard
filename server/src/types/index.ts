@@ -65,6 +65,8 @@ export interface Stroke {
   tool: Tool;
   timestamp: number;
   userId?: string;
+  // Unique ID per drawing gesture (pointerdown to pointerup) for undo grouping
+  strokeId?: string;
   // For magic pen and shape tools - complete path rendering
   points?: Point[];
   shapeType?: 'circle' | 'rectangle' | 'square' | 'triangle';
@@ -136,7 +138,7 @@ export interface ClientToServerEvents {
   resetBoard: (callback?: (error?: string) => void) => void;
 
   // User events
-  userSetup: (data: { name: string; color: string }) => void;
+  userSetup: (data: { userId: string; name: string; color: string }) => void;
   cursorMove: (position: Point) => void;
   drawingState: (isDrawing: boolean) => void;
 }

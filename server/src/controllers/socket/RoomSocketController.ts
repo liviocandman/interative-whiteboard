@@ -16,7 +16,15 @@ export class RoomSocketController {
     roomId: string,
     callback?: (error?: string) => void
   ): Promise<void> {
-    console.log(`[RoomController] START handleJoinRoom - socket: ${socket.id}, room: ${roomId}`);
+    const userId = this.userService.getUserIdBySocketId(socket.id);
+    console.log(`[RoomController] START handleJoinRoom - socket: ${socket.id}, userId: ${userId}, room: ${roomId}`);
+
+    if (!userId) {
+      console.error(`[RoomController] ERROR: No userId found for socket ${socket.id}`);
+      callback?.('User not setup. Please call userSetup first.');
+      return;
+    }
+
     try {
       // Check if room exists
       console.log(`[RoomController] Checking if room ${roomId} exists...`);
@@ -25,10 +33,10 @@ export class RoomSocketController {
         console.log(`[RoomController] Room ${roomId} does not exist, auto-creating...`);
 
         // Auto-create room with default settings
-        const user = this.userService.getUser(socket.id);
+        const user = this.userService.getUser(userId);
         const createdBy = user
           ? { id: user.id, name: user.name }
-          : { id: socket.id, name: 'Anonymous' };
+          : { id: userId, name: 'Anonymous' };
 
         await this.roomService.createRoomWithId(roomId, {
           name: `Room ${roomId.split('-').pop()?.slice(0, 8) || 'Untitled'}`,
@@ -59,7 +67,7 @@ export class RoomSocketController {
       const currentRoom = this.getCurrentRoom(socket);
       if (currentRoom && currentRoom !== roomId) {
         console.log(`[RoomController] Leaving current room ${currentRoom}`);
-        await this.handleLeaveRoomInternal(socket, currentRoom);
+        await this.handleLeaveRoomInternal(socket, currentRoom, userId);
       }
 
       // Join new room
@@ -67,30 +75,30 @@ export class RoomSocketController {
       await socket.join(roomId);
       console.log(`[RoomController] Socket.io join completed ✓`);
 
-      console.log(`[RoomController] Adding user ${socket.id} to RoomService...`);
-      await this.roomService.addUserToRoom(roomId, socket.id);
+      console.log(`[RoomController] Adding user ${userId} to RoomService...`);
+      await this.roomService.addUserToRoom(roomId, userId);
       console.log(`[RoomController] User added to RoomService ✓`);
 
       console.log(`[RoomController] Setting user room in UserService...`);
-      this.userService.setUserRoom(socket.id, roomId);
+      this.userService.setUserRoom(userId, roomId);
       console.log(`[RoomController] User room set ✓`);
 
       // Get room users and send to joining user
       const roomUsers = this.userService.getUsersByRoom(roomId);
-      const currentUser = this.userService.getUser(socket.id);
+      const currentUser = this.userService.getUser(userId);
 
       // Notify others about new user
       if (currentUser) {
-        console.log(`[RoomController] Notifying other users about ${socket.id}`);
+        console.log(`[RoomController] Notifying other users about ${userId}`);
         socket.to(roomId).emit('userJoined', currentUser);
       } else {
-        console.warn(`[RoomController] WARNING: currentUser not found for ${socket.id}`);
+        console.warn(`[RoomController] WARNING: currentUser not found for ${userId}`);
       }
 
       // Send all users to the joining user
       socket.emit('roomUsers', roomUsers);
 
-      console.log(`[RoomController] ✅ User ${socket.id} successfully joined room ${roomId}`);
+      console.log(`[RoomController] ✅ User ${userId} successfully joined room ${roomId}`);
       callback?.();
     } catch (error) {
       console.error(`[RoomController] ERROR joining room ${roomId}:`, error);
@@ -103,13 +111,19 @@ export class RoomSocketController {
     callback?: (error?: string) => void
   ): Promise<void> {
     try {
+      const userId = this.userService.getUserIdBySocketId(socket.id);
+      if (!userId) {
+        callback?.('User not found');
+        return;
+      }
+
       const currentRoom = this.getCurrentRoom(socket);
       if (!currentRoom) {
         callback?.('Not in a room');
         return;
       }
 
-      await this.handleLeaveRoomInternal(socket, currentRoom);
+      await this.handleLeaveRoomInternal(socket, currentRoom, userId);
       callback?.();
     } catch (error) {
       console.error('[Socket] Error leaving room:', error);
@@ -119,24 +133,27 @@ export class RoomSocketController {
 
   async handleDisconnect(socket: Socket): Promise<void> {
     try {
+      const userId = this.userService.getUserIdBySocketId(socket.id);
+      if (!userId) return;
+
       const currentRoom = this.getCurrentRoom(socket);
       if (currentRoom) {
-        await this.handleLeaveRoomInternal(socket, currentRoom);
+        await this.handleLeaveRoomInternal(socket, currentRoom, userId);
       }
     } catch (error) {
       console.error('[Socket] Error handling disconnect:', error);
     }
   }
 
-  private async handleLeaveRoomInternal(socket: Socket, roomId: string): Promise<void> {
-    const remainingUsers = await this.roomService.removeUserFromRoom(roomId, socket.id);
+  private async handleLeaveRoomInternal(socket: Socket, roomId: string, userId: string): Promise<void> {
+    const remainingUsers = await this.roomService.removeUserFromRoom(roomId, userId);
     await socket.leave(roomId);
-    this.userService.setUserRoom(socket.id, undefined);
+    this.userService.setUserRoom(userId, undefined);
 
     // Notify others
-    socket.to(roomId).emit('userLeft', socket.id);
+    socket.to(roomId).emit('userLeft', userId);
 
-    console.log(`[Socket] User ${socket.id} left room ${roomId} (remaining: ${remainingUsers})`);
+    console.log(`[Socket] User ${userId} left room ${roomId} (remaining: ${remainingUsers})`);
   }
 
   private getCurrentRoom(socket: Socket): string | undefined {
@@ -144,3 +161,4 @@ export class RoomSocketController {
     return rooms.find(room => room !== socket.id);
   }
 }
+

@@ -14,6 +14,24 @@ class RoomService {
     }
   }
 
+  async getRoomById(roomId: string): Promise<Room> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/rooms/${roomId}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Room not found');
+        }
+        throw new Error('Failed to fetch room');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching room:', error);
+      throw error;
+    }
+  }
+
   async getStats(): Promise<RoomStats> {
     try {
       const response = await fetch(`${this.baseUrl}/api/rooms/stats`);

@@ -50,12 +50,16 @@ export class SocketHandlers {
     });
 
     // Undo/Redo events
-    socket.on('undoStroke', (callback?: (result: { success: boolean; strokeId?: string }) => void) => {
-      this.handleUndoStroke(socket, callback);
+    socket.on('undoStroke', async (callback?: (result: { success: boolean; strokeId?: string }) => void) => {
+      console.log('[Socket] undoStroke event received from:', socket.id);
+      await this.handleUndoStroke(socket, callback);
+      console.log('[Socket] undoStroke handler completed');
     });
 
-    socket.on('redoStroke', (callback?: (result: { success: boolean }) => void) => {
-      this.handleRedoStroke(socket, callback);
+    socket.on('redoStroke', async (callback?: (result: { success: boolean }) => void) => {
+      console.log('[Socket] redoStroke event received from:', socket.id);
+      await this.handleRedoStroke(socket, callback);
+      console.log('[Socket] redoStroke handler completed');
     });
 
     // User interaction events
@@ -240,15 +244,21 @@ export class SocketHandlers {
     socket: Socket,
     callback?: (result: { success: boolean; strokeId?: string }) => void
   ): Promise<void> {
+    console.log('[Socket] handleUndoStroke starting for socket:', socket.id);
     try {
       const currentRoom = this.getCurrentRoom(socket);
+      console.log('[Socket] currentRoom:', currentRoom);
       if (!currentRoom) {
+        console.log('[Socket] No room found, returning failure');
         callback?.({ success: false });
         return;
       }
 
+      console.log('[Socket] Calling drawingService.undoStroke...');
       const result = await this.drawingService.undoStroke(currentRoom, socket.id);
+      console.log('[Socket] undoStroke result:', result);
       callback?.(result);
+      console.log('[Socket] Callback invoked with result');
     } catch (error) {
       console.error('[Socket] Error undoing stroke:', error);
       callback?.({ success: false });

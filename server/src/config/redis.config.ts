@@ -14,6 +14,7 @@ export const REDIS_KEYS = {
 } as const;
 
 export const REDIS_CONFIG = {
+  URL: process.env.REDIS_URL,
   HOST: process.env.REDIS_HOST || 'localhost',
   PORT: process.env.REDIS_PORT ? Number(process.env.REDIS_PORT) : 6379,
   USERNAME: process.env.REDIS_USERNAME,
@@ -27,7 +28,13 @@ export const REDIS_CONFIG = {
  * @returns Redis client configuration object
  */
 export function getRedisClientConfig() {
-  const config = {
+  if (REDIS_CONFIG.URL) {
+    return {
+      url: REDIS_CONFIG.URL
+    };
+  }
+
+  return {
     socket: {
       host: REDIS_CONFIG.HOST,
       port: REDIS_CONFIG.PORT,
@@ -35,6 +42,4 @@ export function getRedisClientConfig() {
     username: REDIS_CONFIG.USERNAME,
     password: REDIS_CONFIG.PASSWORD,
   };
-
-  return config;
 }

@@ -1,0 +1,68 @@
+# Render Blueprint
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Backend Server
+  - type: web
+    name: scribo-server
+    runtime: node
+    region: oregon  # Choose: oregon, frankfurt, singapore, ohio
+    plan: free      # Options: free, starter, standard, pro
+    
+    # Build settings
+    rootDir: server
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    
+    # Health check
+    healthCheckPath: /health
+    
+    # Environment variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      
+      # Redis (Upstash) - Set these in Render dashboard
+      - key: REDIS_URL
+        sync: false  # Secret - configure in dashboard
+      
+      # CORS - Your Vercel frontend URL
+      - key: CORS_ORIGINS
+        sync: false  # Configure in dashboard: https://your-app.vercel.app
+      
+      # Security
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BCRYPT_ROUNDS
+        value: 12
+      
+      # Rate Limiting
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 900000
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: 100
+      - key: SOCKET_RATE_LIMIT_MAX
+        value: 50
+      
+      # Room Configuration
+      - key: ROOM_CLEANUP_DELAY_MS
+        value: 300000
+      - key: MAX_STROKES_PER_ROOM
+        value: 10000
+      - key: ROOM_TTL_SECONDS
+        value: 3600
+      
+      # User Activity
+      - key: USER_INACTIVITY_TIMEOUT_SECONDS
+        value: 300
+      
+      # Logging
+      - key: LOG_LEVEL
+        value: info
+      - key: ENABLE_METRICS
+        value: true
+    
+    # Auto-deploy on push to main
+    autoDeploy: true

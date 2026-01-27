@@ -11,7 +11,7 @@ services:
     
     # Build settings
     rootDir: server
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
     
     # Health check

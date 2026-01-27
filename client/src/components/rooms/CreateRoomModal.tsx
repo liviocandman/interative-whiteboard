@@ -107,7 +107,7 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
     setIsSubmitting(true);
     try {
       await onCreateRoom(formData);
-    } catch (error) {
+    } catch {
       setErrors({ submit: 'Erro ao criar sala. Tente novamente.' });
     } finally {
       setIsSubmitting(false);

@@ -66,7 +66,7 @@ class RoomService {
 
       const data = await response.json();
       return data.exists;
-    } catch (error) {
+    } catch {
       return false;
     }
   }

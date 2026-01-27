@@ -98,7 +98,7 @@ export function HomePage(): ReactElement {
             <div className="logo-icon">
               <Icons.Grid className="w-5 h-5" />
             </div>
-            <span className="text-headline tracking-tight">Whiteboard</span>
+            <span className="text-headline tracking-tight">Scribo.io</span>
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -122,7 +122,7 @@ export function HomePage(): ReactElement {
       <div className="hero">
         <h1 className="text-h1">Colaboração simplificada.</h1>
         <p className="text-body">
-          Crie, desenhe e compartilhe ideias em tempo real com uma interface limpa e intuitiva.
+          Crie, desenhe e conecte ideias no agora. Solução completa para idealizar, desenhar e compartilhar ideias em tempo real.
         </p>
       </div>
 

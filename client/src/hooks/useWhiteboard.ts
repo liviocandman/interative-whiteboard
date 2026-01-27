@@ -174,11 +174,13 @@ export function useWhiteboard({
         case 'triangle':
           perfectPoints = generateTrianglePoints(smoothed, box);
           break;
-        default:
+        default: {
           // Fallback to circle if somehow unknown
           const center = getCentroid(smoothed);
           const radius = Math.max(box.width, box.height) / 2;
           perfectPoints = generateCirclePoints(center, radius, 60);
+          break;
+        }
       }
 
       // Always emit perfect shape
@@ -186,7 +188,7 @@ export function useWhiteboard({
         console.log('[Magic Pen] Emitting perfect', shapeType, 'with', perfectPoints.length, 'points');
 
         // Restore canvas to state before rough drawing
-        if (canvasSnapshot.current) {
+        if (canvasSnapshot.current && canvasRef.current) {
           const ctx = canvasService.getContext(canvasRef.current);
           if (ctx) {
             ctx.putImageData(canvasSnapshot.current, 0, 0);
@@ -206,7 +208,9 @@ export function useWhiteboard({
         };
 
         // Draw perfect shape locally
-        drawingService.applyStroke(canvasRef.current, perfectStroke);
+        if (canvasRef.current) {
+          drawingService.applyStroke(canvasRef.current, perfectStroke);
+        }
 
         // Emit perfect shape to server (will be broadcast to all including sender)
         socket.emit('drawing', perfectStroke);
@@ -214,7 +218,7 @@ export function useWhiteboard({
 
       // Reset canvas snapshot and collected points
       canvasSnapshot.current = null;
-      collectedPoints.current = [];
+      collectedPoints.current = []
     }
 
     isDrawing.current = false;

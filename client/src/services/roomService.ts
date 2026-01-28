@@ -1,7 +1,7 @@
 import type { Room, RoomStats, CreateRoomData, JoinRoomData } from '../types/room';
 
 class RoomService {
-  private baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+  private baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
 
   async getRooms(): Promise<Room[]> {
     try {

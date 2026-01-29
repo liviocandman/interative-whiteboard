@@ -46,6 +46,8 @@ export interface Stroke {
   timestamp?: number;
   // Unique ID per drawing gesture (pointerdown to pointerup) for undo grouping
   strokeId?: string;
+  // User ID who made the stroke
+  userId?: string;
   // For magic pen and shape tools - complete path rendering
   points?: Point[];
   shapeType?: 'circle' | 'rectangle' | 'square' | 'triangle';

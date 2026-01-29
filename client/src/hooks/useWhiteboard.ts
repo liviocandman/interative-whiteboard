@@ -38,6 +38,16 @@ export function useWhiteboard({
   const collectedPoints = useRef<Point[]>([]); // For magic pen
   const canvasSnapshot = useRef<ImageData | null>(null); // Save canvas state for magic pen
   const currentStrokeId = useRef<string | null>(null); // Unique ID per drawing gesture for undo
+  const localStrokes = useRef<Stroke[]>([]); // Track strokes locally for efficient undo/redo
+
+  // Client-side undo stack for optimistic redo
+  const clientUndoStack = useRef<{ strokes: Stroke[]; strokeId: string }[]>([]);
+
+  // Debounce for undo/redo to prevent rapid clicks
+  const lastUndoTime = useRef<number>(0);
+  const lastRedoTime = useRef<number>(0);
+  const UNDO_REDO_DEBOUNCE_MS = 100; // Reduced to 100ms for faster operations
+
   const [isConnected, setIsConnected] = useState(false);
 
   // Throttled drawing para performance
@@ -72,10 +82,12 @@ export function useWhiteboard({
         tool,
         timestamp: Date.now(),
         strokeId: currentStrokeId.current,
+        userId: socket.id, // Add userId for undo tracking
       };
 
       applyStroke(stroke);
       throttledDraw.current(stroke);
+      localStrokes.current.push(stroke); // Track locally for undo
 
       return;
     }
@@ -132,9 +144,11 @@ export function useWhiteboard({
         tool,
         timestamp: Date.now(),
         strokeId: currentStrokeId.current || undefined,
+        userId: socket.id, // Add userId for undo tracking
       };
 
       throttledDraw.current(stroke);
+      localStrokes.current.push(stroke); // Track locally for undo
     }
 
     lastPoint.current = currentPoint;
@@ -205,6 +219,7 @@ export function useWhiteboard({
           shapeType: shapeType === 'unknown' ? 'circle' : shapeType,
           timestamp: Date.now(),
           strokeId: currentStrokeId.current || undefined,
+          userId: socket.id, // Add userId for undo tracking
         };
 
         // Draw perfect shape locally
@@ -214,6 +229,7 @@ export function useWhiteboard({
 
         // Emit perfect shape to server (will be broadcast to all including sender)
         socket.emit('drawing', perfectStroke);
+        localStrokes.current.push(perfectStroke); // Track locally for undo
       }
 
       // Reset canvas snapshot and collected points
@@ -257,19 +273,61 @@ export function useWhiteboard({
     };
 
     const handleDrawing = (stroke: Stroke): void => {
-      applyStroke(stroke);
+      if (!canvasRef.current) return;
+
+      // Add stroke to local array first
+      localStrokes.current.push(stroke);
+
+      // If stroke has a strokeId, redraw just that stroke group for smooth appearance
+      if (stroke.strokeId) {
+        const strokeGroup = localStrokes.current.filter(s => s.strokeId === stroke.strokeId);
+        // Apply just this stroke group (will draw as continuous path)
+        canvasService.applyStrokes(canvasRef.current, strokeGroup);
+      } else {
+        // Fallback for strokes without strokeId
+        applyStroke(stroke);
+      }
     };
 
     const handleInitialState = (state: CanvasState): void => {
       if (!canvasRef.current) return;
       console.log('[useWhiteboard] Received initialState, restoring canvas...');
       canvasService.restoreCanvasState(canvasRef.current, state);
+      // Store strokes locally for efficient undo/redo
+      localStrokes.current = [...state.strokes];
+    };
+
+    const handleStrokeRemoved = (data: { strokeId: string; userId: string }): void => {
+      if (!canvasRef.current) return;
+      console.log('[useWhiteboard] Received strokeRemoved event:', data.strokeId);
+
+      // Remove matching strokes from local array
+      localStrokes.current = localStrokes.current.filter(
+        stroke => !(stroke.strokeId === data.strokeId && stroke.userId === data.userId)
+      );
+
+      // Redraw canvas from local strokes (much faster than fetching from server)
+      canvasService.redrawFromStrokes(canvasRef.current, localStrokes.current);
+      console.log('[useWhiteboard] Canvas redrawn after stroke removal');
+    };
+
+    const handleStrokeAdded = (data: { strokes: Stroke[]; strokeId: string; userId: string }): void => {
+      if (!canvasRef.current) return;
+      console.log('[useWhiteboard] Received strokeAdded event:', data.strokeId, 'with', data.strokes.length, 'strokes');
+
+      // Add all strokes to local array
+      localStrokes.current.push(...data.strokes);
+
+      // Apply each stroke to canvas
+      canvasService.applyStrokes(canvasRef.current, data.strokes);
+      console.log('[useWhiteboard] Strokes applied after redo');
     };
 
     const handleClearBoard = (): void => {
       console.log('[useWhiteboard] Received clearBoard event');
       if (!canvasRef.current) return;
       canvasService.clearCanvas(canvasRef.current);
+      localStrokes.current = []; // Clear local strokes
     };
 
     const handleError = (error: { event: string; message: string }): void => {
@@ -281,6 +339,8 @@ export function useWhiteboard({
     socket.on('disconnect', handleDisconnect);
     socket.on('drawing', handleDrawing);
     socket.on('initialState', handleInitialState);
+    socket.on('strokeRemoved', handleStrokeRemoved);
+    socket.on('strokeAdded', handleStrokeAdded);
     socket.on('clearBoard', handleClearBoard);
     socket.on('error', handleError);
 
@@ -298,6 +358,8 @@ export function useWhiteboard({
       socket.off('disconnect', handleDisconnect);
       socket.off('drawing', handleDrawing);
       socket.off('initialState', handleInitialState);
+      socket.off('strokeRemoved', handleStrokeRemoved);
+      socket.off('strokeAdded', handleStrokeAdded);
       socket.off('clearBoard', handleClearBoard);
       socket.off('error', handleError);
 
@@ -318,34 +380,94 @@ export function useWhiteboard({
     return () => window.removeEventListener('resize', handleResize);
   }, [canvasRef]);
 
-  // Undo function
+  // Optimistic undo - apply locally first, then sync with server
   const undo = useCallback((): void => {
-    console.log('[useWhiteboard] Undoing... Socket connected:', socket.connected, 'Socket ID:', socket.id);
-    if (!socket.connected) {
-      console.error('[useWhiteboard] Cannot undo: socket not connected');
+    // Debounce: prevent rapid clicks
+    const now = Date.now();
+    if (now - lastUndoTime.current < UNDO_REDO_DEBOUNCE_MS) {
+      console.log('[useWhiteboard] Undo ignored (debounce)');
       return;
     }
-    socket.emit('undoStroke', (result: { success: boolean; strokeId?: string }) => {
-      console.log('[useWhiteboard] Undo callback received:', result);
-      if (result.success) {
-        console.log('[useWhiteboard] Undo successful');
-      } else {
-        console.log('[useWhiteboard] Nothing to undo');
-      }
-    });
-  }, []);
+    lastUndoTime.current = now;
 
-  // Redo function
+    if (!canvasRef.current) return;
+
+    // Find the last strokeId for this user
+    const userId = socket.id;
+    const userStrokes = localStrokes.current.filter(s => s.userId === userId);
+    if (userStrokes.length === 0) {
+      console.log('[useWhiteboard] Nothing to undo locally');
+      return;
+    }
+
+    // Get the last strokeId
+    const lastStrokeId = userStrokes[userStrokes.length - 1].strokeId;
+    if (!lastStrokeId) {
+      console.log('[useWhiteboard] Last stroke has no strokeId');
+      return;
+    }
+
+    // Find all strokes with this strokeId and remove them
+    const undoneStrokes = localStrokes.current.filter(s => s.strokeId === lastStrokeId);
+    localStrokes.current = localStrokes.current.filter(s => s.strokeId !== lastStrokeId);
+
+    // Save to client undo stack for potential redo
+    clientUndoStack.current.push({ strokes: undoneStrokes, strokeId: lastStrokeId });
+
+    // Limit client undo stack size
+    if (clientUndoStack.current.length > 20) {
+      clientUndoStack.current.shift();
+    }
+
+    // INSTANT: Redraw canvas immediately
+    canvasService.redrawFromStrokes(canvasRef.current, localStrokes.current);
+    console.log('[useWhiteboard] Optimistic undo applied locally');
+
+    // Sync with server in background (don't wait for response)
+    if (socket.connected) {
+      socket.emit('undoStroke', (result: { success: boolean; strokeId?: string }) => {
+        if (!result.success) {
+          console.warn('[useWhiteboard] Server undo failed, local already applied');
+        }
+      });
+    }
+  }, [canvasRef]);
+
+  // Optimistic redo - apply locally first from client stack, then sync with server
   const redo = useCallback((): void => {
-    console.log('[useWhiteboard] Redoing...');
-    socket.emit('redoStroke', (result: { success: boolean }) => {
-      if (result.success) {
-        console.log('[useWhiteboard] Redo successful');
-      } else {
-        console.log('[useWhiteboard] Nothing to redo');
-      }
-    });
-  }, []);
+    // Debounce: prevent rapid clicks
+    const now = Date.now();
+    if (now - lastRedoTime.current < UNDO_REDO_DEBOUNCE_MS) {
+      console.log('[useWhiteboard] Redo ignored (debounce)');
+      return;
+    }
+    lastRedoTime.current = now;
+
+    if (!canvasRef.current) return;
+
+    // Pop from client undo stack
+    const undoneGroup = clientUndoStack.current.pop();
+    if (!undoneGroup) {
+      console.log('[useWhiteboard] Nothing to redo locally');
+      return;
+    }
+
+    // Restore strokes to localStrokes
+    localStrokes.current.push(...undoneGroup.strokes);
+
+    // INSTANT: Apply the stroke group immediately
+    canvasService.applyStrokes(canvasRef.current, undoneGroup.strokes);
+    console.log('[useWhiteboard] Optimistic redo applied locally');
+
+    // Sync with server in background (don't wait for response)
+    if (socket.connected) {
+      socket.emit('redoStroke', (result: { success: boolean }) => {
+        if (!result.success) {
+          console.warn('[useWhiteboard] Server redo failed, local already applied');
+        }
+      });
+    }
+  }, [canvasRef]);
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {

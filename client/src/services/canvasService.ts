@@ -65,15 +65,87 @@ class CanvasService {
     }
   }
 
-  private applyStrokes(canvas: HTMLCanvasElement, strokes: Stroke[]): void {
+  /**
+   * Redraw canvas from a list of strokes (used after undo/redo)
+   * More efficient than full restoreCanvasState as it doesn't need initial state fetch
+   */
+  redrawFromStrokes(canvas: HTMLCanvasElement, strokes: Stroke[]): void {
+    this.clearCanvas(canvas);
+    this.applyStrokes(canvas, strokes);
+  }
+
+  applyStrokes(canvas: HTMLCanvasElement, strokes: Stroke[]): void {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Group strokes by strokeId to draw continuous paths
+    const strokeGroups = new Map<string, Stroke[]>();
+    const ungroupedStrokes: Stroke[] = [];
+
     strokes.forEach(stroke => {
-      if (stroke?.from && stroke?.to) {
-        this.drawStroke(canvas, stroke);
+      if (!stroke?.from || !stroke?.to) return;
+
+      if (stroke.strokeId) {
+        const group = strokeGroups.get(stroke.strokeId) || [];
+        group.push(stroke);
+        strokeGroups.set(stroke.strokeId, group);
+      } else {
+        ungroupedStrokes.push(stroke);
       }
     });
+
+    // Draw grouped strokes as continuous paths
+    strokeGroups.forEach((group) => {
+      if (group.length === 0) return;
+      this.drawStrokeGroup(canvas, group);
+    });
+
+    // Draw ungrouped strokes individually
+    ungroupedStrokes.forEach(stroke => {
+      this.drawStroke(canvas, stroke);
+    });
+  }
+
+  /**
+   * Draw a group of strokes with the same strokeId as a single continuous path
+   */
+  private drawStrokeGroup(canvas: HTMLCanvasElement, strokes: Stroke[]): void {
+    if (strokes.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const firstStroke = strokes[0];
+
+    // Handle bucket tool
+    if (firstStroke.tool === 'bucket') {
+      floodFill(canvas, firstStroke.from, firstStroke.color);
+      return;
+    }
+
+    // Handle magic pen shapes (they have points array)
+    if (firstStroke.points && firstStroke.points.length > 0) {
+      this.drawStroke(canvas, firstStroke);
+      return;
+    }
+
+    ctx.save();
+    ctx.strokeStyle = firstStroke.color;
+    ctx.lineWidth = firstStroke.lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalCompositeOperation =
+      firstStroke.tool === 'eraser' ? 'destination-out' : 'source-over';
+
+    // Draw all segments as a single continuous path
+    ctx.beginPath();
+    ctx.moveTo(firstStroke.from.x, firstStroke.from.y);
+
+    strokes.forEach(stroke => {
+      ctx.lineTo(stroke.to.x, stroke.to.y);
+    });
+
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawStroke(canvas: HTMLCanvasElement, stroke: Stroke): void {

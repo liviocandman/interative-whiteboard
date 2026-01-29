@@ -3,9 +3,12 @@ import { StrokeService } from './StrokeService';
 import { StateService } from './StateService';
 import type { Stroke, CanvasState } from '../types';
 
-interface UndoneStroke {
-  stroke: Stroke;
-  index: number;
+/**
+ * Represents a group of undone strokes (all segments of a single drawing gesture)
+ */
+interface UndoneStrokeGroup {
+  strokes: Stroke[];   // All stroke segments with the same strokeId
+  strokeId: string;    // The strokeId that groups these strokes
 }
 
 export class DrawingService {
@@ -13,8 +16,8 @@ export class DrawingService {
   private stateService: StateService;
   private io: Server;
 
-  // Track undone strokes per user per room
-  private undoneStrokes: Map<string, Map<string, UndoneStroke[]>> = new Map();
+  // Track undone stroke groups per user per room
+  private undoneStrokes: Map<string, Map<string, UndoneStrokeGroup[]>> = new Map();
 
   constructor(io: Server) {
     this.io = io;
@@ -59,62 +62,55 @@ export class DrawingService {
   /**
    * Undo last stroke for a user
    * Removes all stroke segments with the same strokeId (entire drawing gesture)
+   * Emits targeted strokeRemoved event instead of full initialState for better performance
    */
   async undoStroke(roomId: string, userId: string): Promise<{ success: boolean; strokeId?: string }> {
     try {
-      // Get all strokes for the room
+      // Get all strokes for the room to find the last one by this user
       const strokes = await this.strokeService.getStrokes(roomId);
 
       // Find the last stroke by this user
-      let lastUserStrokeIndex = -1;
+      let lastUserStroke: Stroke | undefined;
       for (let i = strokes.length - 1; i >= 0; i--) {
         if (strokes[i].userId === userId) {
-          lastUserStrokeIndex = i;
+          lastUserStroke = strokes[i];
           break;
         }
       }
 
-      if (lastUserStrokeIndex === -1) {
+      if (!lastUserStroke) {
         console.log(`[DrawingService] No strokes to undo for user ${userId}`);
         return { success: false };
       }
 
-      const undoneStroke = strokes[lastUserStrokeIndex];
-      const strokeIdToRemove = undoneStroke.strokeId;
+      const strokeIdToRemove = lastUserStroke.strokeId || `${lastUserStroke.timestamp}`;
 
-      // Find all strokes with the same strokeId (entire drawing gesture)
-      let strokesToUndo: typeof strokes = [];
-      if (strokeIdToRemove) {
-        strokesToUndo = strokes.filter(s => s.strokeId === strokeIdToRemove && s.userId === userId);
-      } else {
-        // If no strokeId, just remove the single stroke (legacy behavior)
-        strokesToUndo = [undoneStroke];
+      // Remove all strokes with this strokeId using the optimized method
+      const removedStrokes = await this.strokeService.removeStrokesByStrokeId(
+        roomId,
+        strokeIdToRemove,
+        userId
+      );
+
+      if (removedStrokes.length === 0) {
+        return { success: false };
       }
 
-      // Store undone strokes for potential redo
-      for (const stroke of strokesToUndo) {
-        this.addToUndoStack(roomId, userId, {
-          stroke,
-          index: strokes.indexOf(stroke)
-        });
-      }
-
-      // Remove all strokes with the same strokeId from Redis and rebuild
-      const newStrokes = strokes.filter(s => {
-        if (strokeIdToRemove) {
-          return !(s.strokeId === strokeIdToRemove && s.userId === userId);
-        }
-        return s !== undoneStroke;
+      // Store all removed strokes as a single group for potential redo
+      this.addToUndoStack(roomId, userId, {
+        strokes: removedStrokes,
+        strokeId: strokeIdToRemove
       });
 
-      await this.rebuildStrokes(roomId, newStrokes);
+      // Emit targeted strokeRemoved event instead of full initialState
+      // This allows clients to remove just the affected strokes without full canvas redraw
+      this.io.to(roomId).emit('strokeRemoved', {
+        strokeId: strokeIdToRemove,
+        userId: userId
+      });
 
-      // Broadcast the updated state to all users in the room
-      const newState = await this.getInitialState(roomId);
-      this.io.to(roomId).emit('initialState', newState);
-
-      console.log(`[DrawingService] Undo successful for user ${userId} in room ${roomId}. Removed ${strokesToUndo.length} stroke segments.`);
-      return { success: true, strokeId: strokeIdToRemove || `${undoneStroke.timestamp}` };
+      console.log(`[DrawingService] Undo successful for user ${userId} in room ${roomId}. Removed ${removedStrokes.length} stroke segments.`);
+      return { success: true, strokeId: strokeIdToRemove };
     } catch (error) {
       console.error('[DrawingService] Undo failed:', error);
       return { success: false };
@@ -122,26 +118,32 @@ export class DrawingService {
   }
 
   /**
-   * Redo last undone stroke for a user
+   * Redo last undone stroke group for a user
+   * Restores all stroke segments at once, not one by one
    */
-  async redoStroke(roomId: string, userId: string): Promise<{ success: boolean }> {
+  async redoStroke(roomId: string, userId: string): Promise<{ success: boolean; strokeId?: string }> {
     try {
-      const undoneStroke = this.popFromUndoStack(roomId, userId);
+      const undoneGroup = this.popFromUndoStack(roomId, userId);
 
-      if (!undoneStroke) {
+      if (!undoneGroup) {
         console.log(`[DrawingService] No strokes to redo for user ${userId}`);
         return { success: false };
       }
 
-      // Re-add the stroke
-      await this.strokeService.saveAndBroadcast(roomId, undoneStroke.stroke, userId);
+      // Re-add all strokes in the group to Redis
+      for (const stroke of undoneGroup.strokes) {
+        await this.strokeService.addStroke(roomId, stroke);
+      }
 
-      // Broadcast the updated state to all users in the room
-      const newState = await this.getInitialState(roomId);
-      this.io.to(roomId).emit('initialState', newState);
+      // Emit a single strokeAdded event with all strokes
+      this.io.to(roomId).emit('strokeAdded', {
+        strokes: undoneGroup.strokes,
+        strokeId: undoneGroup.strokeId,
+        userId: userId
+      });
 
-      console.log(`[DrawingService] Redo successful for user ${userId} in room ${roomId}`);
-      return { success: true };
+      console.log(`[DrawingService] Redo successful for user ${userId} in room ${roomId}. Restored ${undoneGroup.strokes.length} stroke segments.`);
+      return { success: true, strokeId: undoneGroup.strokeId };
     } catch (error) {
       console.error('[DrawingService] Redo failed:', error);
       return { success: false };
@@ -178,7 +180,7 @@ export class DrawingService {
   }
 
   // Undo stack management
-  private getUndoStack(roomId: string, userId: string): UndoneStroke[] {
+  private getUndoStack(roomId: string, userId: string): UndoneStrokeGroup[] {
     if (!this.undoneStrokes.has(roomId)) {
       this.undoneStrokes.set(roomId, new Map());
     }
@@ -189,16 +191,16 @@ export class DrawingService {
     return roomMap.get(userId)!;
   }
 
-  private addToUndoStack(roomId: string, userId: string, undone: UndoneStroke): void {
+  private addToUndoStack(roomId: string, userId: string, undone: UndoneStrokeGroup): void {
     const stack = this.getUndoStack(roomId, userId);
     stack.push(undone);
-    // Limit stack size
+    // Limit stack size (20 stroke groups = 20 undo operations)
     if (stack.length > 20) {
       stack.shift();
     }
   }
 
-  private popFromUndoStack(roomId: string, userId: string): UndoneStroke | undefined {
+  private popFromUndoStack(roomId: string, userId: string): UndoneStrokeGroup | undefined {
     const stack = this.getUndoStack(roomId, userId);
     return stack.pop();
   }

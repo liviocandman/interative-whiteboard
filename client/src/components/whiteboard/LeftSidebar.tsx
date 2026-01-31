@@ -14,7 +14,7 @@ interface LeftSidebarProps {
   onReset: () => void;
   onUndo: () => void;
   onRedo: () => void;
-  canDraw?: boolean; // Optional for backward compatibility
+  canDraw?: boolean;
 }
 
 export function LeftSidebar({
@@ -27,31 +27,30 @@ export function LeftSidebar({
   onReset,
   onUndo,
   onRedo,
-  canDraw = true, // Default to true
+  canDraw = true,
 }: LeftSidebarProps): ReactElement {
   const [isStrokeWidthOpen, setIsStrokeWidthOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const strokeWidthRef = useRef<HTMLDivElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
-  const customColorRef = useRef<HTMLInputElement>(null);
 
+  // Close popovers and menu when clicking outside
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent | TouchEvent) {
-      if (strokeWidthRef.current && !strokeWidthRef.current.contains(event.target as Node)) {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+
+      if (strokeWidthRef.current && !strokeWidthRef.current.contains(target)) {
         setIsStrokeWidthOpen(false);
       }
-      if (colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(target)) {
         setIsColorPickerOpen(false);
       }
     }
 
-    // Support both mouse and touch events for mobile
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('click', handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside);
     };
   }, []);
 
@@ -62,16 +61,24 @@ export function LeftSidebar({
     { id: 'bucket', icon: Icons.Fill, label: 'Preencher' },
   ];
 
+  const handleColorSelect = (c: string) => {
+    onColorChange(c);
+    setIsColorPickerOpen(false);
+  };
+
   return (
     <div className={`floating-sidebar ${isMenuOpen ? 'menu-expanded' : ''}`}>
-      {/* Menu Toggle - Visible only on mobile < 420px via CSS */}
+      {/* Menu Toggle */}
       <button
         className="menu-toggle-btn"
-        onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsMenuOpen(!isMenuOpen);
+        }}
         onTouchEnd={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setIsMenuOpen(!isMenuOpen);
+          setIsMenuOpen(prev => !prev);
         }}
         title="Menu"
       >
@@ -79,14 +86,8 @@ export function LeftSidebar({
       </button>
 
       <div className="sidebar-content">
-        {/* Warning icon if drawing is disabled */}
         {!canDraw && (
-          <div
-            className="disabled-warning"
-            title="Drawing is disabled in this room"
-          >
-            🔒
-          </div>
+          <div className="disabled-warning" title="Drawing is disabled in this room">🔒</div>
         )}
 
         {tools.map((tool) => {
@@ -94,8 +95,7 @@ export function LeftSidebar({
           const isActive = currentTool === tool.id;
           const isDisabled = !canDraw && tool.id !== 'select';
 
-          const handleSelect = (e: React.MouseEvent | React.TouchEvent) => {
-            e.stopPropagation();
+          const handleSelect = () => {
             if (!isDisabled) onToolChange(tool.id as Tool);
           };
 
@@ -103,9 +103,9 @@ export function LeftSidebar({
             <button
               key={tool.id}
               onClick={handleSelect}
-              onTouchStart={(e) => {
+              onTouchEnd={(e) => {
                 e.preventDefault();
-                handleSelect(e);
+                handleSelect();
               }}
               className={`tool-btn ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
               title={isDisabled ? `${tool.label} (Disabled)` : tool.label}
@@ -127,10 +127,9 @@ export function LeftSidebar({
         >
           <button
             className={`tool-btn color-picker-btn ${isColorPickerOpen ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); if (canDraw) setIsColorPickerOpen(!isColorPickerOpen); }}
-            onTouchStart={(e) => {
+            onClick={() => canDraw && setIsColorPickerOpen(!isColorPickerOpen)}
+            onTouchEnd={(e) => {
               e.preventDefault();
-              e.stopPropagation();
               if (canDraw) setIsColorPickerOpen(!isColorPickerOpen);
             }}
             title={canDraw ? "Selecionar cor" : "Color picker (Disabled)"}
@@ -140,36 +139,37 @@ export function LeftSidebar({
           </button>
 
           {isColorPickerOpen && canDraw && (
-            <div className="color-picker-popover" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+            <div className="color-picker-popover">
               <div className="color-swatches">
-                {['#000000', '#ffffff', '#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280'].map((c) => (
+                {/* All colors in a single array for cleaner code */}
+                {[
+                  // Grays
+                  '#000000', '#374151', '#6b7280', '#9ca3af', '#d1d5db', '#ffffff',
+                  // Vibrant
+                  '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6',
+                  // Purples & pinks
+                  '#8b5cf6', '#a855f7', '#ec4899', '#f43f5e', '#84cc16', '#06b6d4',
+                  // Earth tones
+                  '#78350f', '#92400e', '#166534', '#1e40af', '#7c3aed', '#be185d',
+                ].map((c) => (
                   <button
                     key={c}
+                    type="button"
                     className={`color-swatch ${color === c ? 'active' : ''}`}
-                    style={{ backgroundColor: c, border: c === '#ffffff' ? '1px solid #ccc' : 'none' }}
-                    onClick={() => { onColorChange(c); setIsColorPickerOpen(false); }}
-                    onTouchStart={(e) => { e.preventDefault(); onColorChange(c); setIsColorPickerOpen(false); }}
+                    style={{ backgroundColor: c }}
+                    onClick={() => handleColorSelect(c)}
+                    onTouchEnd={(e) => { e.preventDefault(); handleColorSelect(c); }}
                   />
                 ))}
               </div>
-              <div
-                className="color-custom"
-                onClick={() => customColorRef.current?.click()}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  customColorRef.current?.click();
-                }}
-              >
+              <div className="color-custom">
                 <span>Personalizada:</span>
-                <div className="color-custom-preview" style={{ backgroundColor: color }}>
-                  <input
-                    ref={customColorRef}
-                    type="color"
-                    value={color}
-                    onChange={(e) => onColorChange(e.target.value)}
-                    className="color-custom-input"
-                  />
-                </div>
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => onColorChange(e.target.value)}
+                  className="color-custom-input-visible"
+                />
               </div>
             </div>
           )}
@@ -180,10 +180,9 @@ export function LeftSidebar({
         {/* Stroke Width */}
         <div className="stroke-width-container" ref={strokeWidthRef} style={{ position: 'relative' }}>
           <button
-            onClick={(e) => { e.stopPropagation(); if (canDraw) setIsStrokeWidthOpen(!isStrokeWidthOpen); }}
-            onTouchStart={(e) => {
+            onClick={() => canDraw && setIsStrokeWidthOpen(!isStrokeWidthOpen)}
+            onTouchEnd={(e) => {
               e.preventDefault();
-              e.stopPropagation();
               if (canDraw) setIsStrokeWidthOpen(!isStrokeWidthOpen);
             }}
             className={`tool-btn ${isStrokeWidthOpen ? 'active' : ''}`}
@@ -195,7 +194,7 @@ export function LeftSidebar({
           </button>
 
           {isStrokeWidthOpen && canDraw && (
-            <div className="stroke-width-popover" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+            <div className="stroke-width-popover">
               <StrokeWidthSlider
                 value={lineWidth}
                 onChange={onLineWidthChange}
@@ -208,14 +207,10 @@ export function LeftSidebar({
 
         <div className="tool-divider" />
 
-        {/* Undo/Redo Buttons */}
+        {/* Undo/Redo */}
         <button
-          onClick={(e) => { e.stopPropagation(); onUndo(); }}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (canDraw) onUndo();
-          }}
+          onClick={onUndo}
+          onTouchEnd={(e) => { e.preventDefault(); onUndo(); }}
           className="tool-btn"
           title={canDraw ? "Desfazer (Ctrl+Z)" : "Undo (Disabled)"}
           disabled={!canDraw}
@@ -224,12 +219,8 @@ export function LeftSidebar({
           <Icons.Undo />
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); onRedo(); }}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (canDraw) onRedo();
-          }}
+          onClick={onRedo}
+          onTouchEnd={(e) => { e.preventDefault(); onRedo(); }}
           className="tool-btn"
           title={canDraw ? "Refazer (Ctrl+Y)" : "Redo (Disabled)"}
           disabled={!canDraw}
@@ -240,14 +231,10 @@ export function LeftSidebar({
 
         <div className="tool-divider" />
 
-        {/* Reset Button */}
+        {/* Reset */}
         <button
-          onClick={(e) => { e.stopPropagation(); onReset(); }}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (canDraw) onReset();
-          }}
+          onClick={onReset}
+          onTouchEnd={(e) => { e.preventDefault(); onReset(); }}
           className="tool-btn tool-btn--danger"
           title={canDraw ? "Limpar quadro" : "Clear board (Disabled)"}
           disabled={!canDraw}

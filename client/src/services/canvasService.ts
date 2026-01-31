@@ -2,7 +2,8 @@
 import { socket } from './socket';
 import { debounce } from '../utils/throttle';
 import { floodFill } from './fillService';
-import type { Point, CanvasState, Stroke } from '../types';
+import type { Point, CanvasState, Stroke, ViewConfig } from '../types';
+import { DEFAULT_VIEW, VIEW_LIMITS } from '../types';
 
 class CanvasService {
   private saveStateDebounced = debounce((canvas: HTMLCanvasElement): void => {
@@ -10,12 +11,77 @@ class CanvasService {
     socket.emit('saveState', dataURL);
   }, 1000);
 
-  getPointFromEvent(e: React.PointerEvent<HTMLCanvasElement>): Point {
-    const rect = e.currentTarget.getBoundingClientRect();
+  // Convert screen coordinates to world coordinates
+  screenToWorld(screen: Point, view: ViewConfig): Point {
     return {
+      x: (screen.x - view.offset.x) / view.zoom,
+      y: (screen.y - view.offset.y) / view.zoom,
+    };
+  }
+
+  // Convert world coordinates to screen coordinates
+  worldToScreen(world: Point, view: ViewConfig): Point {
+    return {
+      x: world.x * view.zoom + view.offset.x,
+      y: world.y * view.zoom + view.offset.y,
+    };
+  }
+
+  // Apply view transform to canvas context before drawing
+  // Incorporates DPR, View Offset, and Zoom into a single transformation matrix
+  applyViewTransform(ctx: CanvasRenderingContext2D, view: ViewConfig, canvas: HTMLCanvasElement): void {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    // Reset and apply scaling chain: Context coordinates -> DPI Scale -> View Offset -> Zoom
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // Identity
+    ctx.scale(scaleX, scaleY);         // Map to CSS pixels
+    ctx.translate(view.offset.x, view.offset.y); // Apply panning
+    ctx.scale(view.zoom, view.zoom);             // Apply zooming
+  }
+
+  // Zoom centered on a specific screen point (for mouse wheel zoom)
+  zoomAtPoint(point: Point, newZoom: number, view: ViewConfig): ViewConfig {
+    const clampedZoom = Math.max(VIEW_LIMITS.MIN_ZOOM, Math.min(VIEW_LIMITS.MAX_ZOOM, newZoom));
+    const worldPoint = this.screenToWorld(point, view);
+    return {
+      zoom: clampedZoom,
+      offset: {
+        x: point.x - worldPoint.x * clampedZoom,
+        y: point.y - worldPoint.y * clampedZoom,
+      },
+    };
+  }
+
+  // Get actual pixel coordinates for imageData operations (like bucket fill)
+  getPixelPoint(world: Point, view: ViewConfig, canvas: HTMLCanvasElement): Point {
+    const screen = this.worldToScreen(world, view);
+    const rect = canvas.getBoundingClientRect();
+
+    // Calculate the actual scale between CSS pixels and the canvas buffer
+    // This is more robust than window.devicePixelRatio
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    return {
+      x: screen.x * scaleX,
+      y: screen.y * scaleY,
+    };
+  }
+
+  // Get point from event, optionally converting to world space
+  getPointFromEvent(e: React.PointerEvent<HTMLCanvasElement>, view?: ViewConfig): Point {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const screenPoint = {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     };
+
+    if (view) {
+      return this.screenToWorld(screenPoint, view);
+    }
+    return screenPoint;
   }
 
   resizeCanvas(canvas: HTMLCanvasElement): void {
@@ -42,10 +108,12 @@ class CanvasService {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Reset transformation matrix to clear the entire canvas regardless of zoom/pan
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
-  restoreCanvasState(canvas: HTMLCanvasElement, state: CanvasState): void {
+  restoreCanvasState(canvas: HTMLCanvasElement, state: CanvasState, view?: ViewConfig): void {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -57,80 +125,81 @@ class CanvasService {
       img.onload = (): void => {
         ctx.drawImage(img, 0, 0);
         // Aplica strokes sobre o snapshot
-        this.applyStrokes(canvas, state.strokes);
+        this.applyStrokes(canvas, state.strokes, view);
       };
       img.src = state.snapshot;
     } else {
       // Apenas aplica os strokes
-      this.applyStrokes(canvas, state.strokes);
+      this.applyStrokes(canvas, state.strokes, view);
     }
   }
 
   /**
    * Redraw canvas from a list of strokes (used after undo/redo)
    * More efficient than full restoreCanvasState as it doesn't need initial state fetch
+   * @param view - Optional view config for zoom/pan transformation
    */
-  redrawFromStrokes(canvas: HTMLCanvasElement, strokes: Stroke[]): void {
+  redrawFromStrokes(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): void {
     this.clearCanvas(canvas);
-    this.applyStrokes(canvas, strokes);
+    this.applyStrokes(canvas, strokes, view);
   }
 
-  applyStrokes(canvas: HTMLCanvasElement, strokes: Stroke[]): void {
+  applyStrokes(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): void {
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx || strokes.length === 0) return;
 
-    // Group strokes by strokeId to draw continuous paths
-    const strokeGroups = new Map<string, Stroke[]>();
-    const ungroupedStrokes: Stroke[] = [];
+    if (view) {
+      ctx.save();
+      this.applyViewTransform(ctx, view, canvas);
+    }
 
-    strokes.forEach(stroke => {
-      if (!stroke?.from || !stroke?.to) return;
+    // Sort all strokes by timestamp to ensure strictly chronological rendering
+    // This is crucial for layering (e.g., bucket fill on top of a shape)
+    const sortedStrokes = [...strokes].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-      if (stroke.strokeId) {
-        const group = strokeGroups.get(stroke.strokeId) || [];
-        group.push(stroke);
-        strokeGroups.set(stroke.strokeId, group);
-      } else {
-        ungroupedStrokes.push(stroke);
+    // Grouping for performance, but we must respect time
+    // If we have a mix of tools, we might need to break groups to respect time
+    // For now, let's render them as they come, identifying groups
+    const processedIds = new Set<string>();
+
+    sortedStrokes.forEach((stroke) => {
+      if (stroke.strokeId && !processedIds.has(stroke.strokeId)) {
+        // Find all other strokes in this group
+        const group = sortedStrokes.filter(s => s.strokeId === stroke.strokeId);
+        this.drawStrokeGroup(canvas, group, view);
+        processedIds.add(stroke.strokeId);
+      } else if (!stroke.strokeId) {
+        // Ungrouped individual stroke
+        this.drawStroke(canvas, stroke, view);
       }
     });
 
-    // Draw grouped strokes as continuous paths
-    strokeGroups.forEach((group) => {
-      if (group.length === 0) return;
-      this.drawStrokeGroup(canvas, group);
-    });
-
-    // Draw ungrouped strokes individually
-    ungroupedStrokes.forEach(stroke => {
-      this.drawStroke(canvas, stroke);
-    });
+    if (view) {
+      ctx.restore();
+    }
   }
 
   /**
    * Draw a group of strokes with the same strokeId as a single continuous path
    */
-  private drawStrokeGroup(canvas: HTMLCanvasElement, strokes: Stroke[]): void {
+  private drawStrokeGroup(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): void {
     if (strokes.length === 0) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const firstStroke = strokes[0];
 
-    // Handle bucket tool - scale by DPR for receiving fills from other devices
+    // Handle bucket tool
     if (firstStroke.tool === 'bucket') {
-      const dpr = window.devicePixelRatio || 1;
-      const scaledPoint = {
-        x: firstStroke.from.x * dpr,
-        y: firstStroke.from.y * dpr,
-      };
-      floodFill(canvas, scaledPoint, firstStroke.color);
+      // Bucket fill needs raw pixel coordinates for imageData
+      const fillPoint = this.getPixelPoint(firstStroke.from, view || DEFAULT_VIEW, canvas);
+      floodFill(canvas, fillPoint, firstStroke.color);
       return;
     }
 
     // Handle magic pen shapes (they have points array)
     if (firstStroke.points && firstStroke.points.length > 0) {
-      this.drawStroke(canvas, firstStroke);
+      this.drawStroke(canvas, firstStroke, view);
       return;
     }
 
@@ -146,7 +215,7 @@ class CanvasService {
     ctx.beginPath();
     ctx.moveTo(firstStroke.from.x, firstStroke.from.y);
 
-    strokes.forEach(stroke => {
+    strokes.slice(1).forEach(stroke => {
       ctx.lineTo(stroke.to.x, stroke.to.y);
     });
 
@@ -154,13 +223,14 @@ class CanvasService {
     ctx.restore();
   }
 
-  private drawStroke(canvas: HTMLCanvasElement, stroke: Stroke): void {
+  private drawStroke(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): void {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     // Handle bucket tool
     if (stroke.tool === 'bucket') {
-      floodFill(canvas, stroke.from, stroke.color);
+      const fillPoint = this.getPixelPoint(stroke.from, view || DEFAULT_VIEW, canvas);
+      floodFill(canvas, fillPoint, stroke.color);
       return;
     }
 

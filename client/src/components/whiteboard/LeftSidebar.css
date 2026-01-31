@@ -70,6 +70,23 @@
   margin: 0 0.25rem;
 }
 
+/* Zoom Controls */
+.zoom-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.zoom-level {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: center;
+}
+
+
 .stroke-width-popover {
   position: absolute;
   right: 100%;

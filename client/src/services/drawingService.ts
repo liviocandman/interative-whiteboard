@@ -1,13 +1,13 @@
-// client/src/services/drawingService.ts - Enhanced
 import { canvasService } from './canvasService';
 import { floodFill } from './fillService';
-import type { Tool, Point, Stroke } from '../types';
+import { DEFAULT_VIEW, type Tool, type Point, type Stroke, type ViewConfig } from '../types';
 
 interface DrawingOptions {
   tool: Tool;
   color: string;
   lineWidth: number;
   point: Point;
+  view?: ViewConfig; // Optional view for coordinate transformation
 }
 
 class DrawingService {
@@ -20,8 +20,16 @@ class DrawingService {
 
     // Handle bucket fill tool differently
     if (options.tool === 'bucket') {
-      this.handleBucketFill(canvas, options.point, options.color);
+      const view = options.view || { zoom: 1, offset: { x: 0, y: 0 } };
+      this.handleBucketFill(canvas, options.point, options.color, view);
       return;
+    }
+
+    ctx.save();
+
+    // Apply view transform so (world) points are drawn at correct screen positions
+    if (options.view) {
+      canvasService.applyViewTransform(ctx, options.view, canvas);
     }
 
     this.setupDrawingContext(ctx, options);
@@ -42,6 +50,7 @@ class DrawingService {
     const ctx = canvasService.getContext(canvas);
     if (!ctx) return;
 
+    // Line is drawn in world space because the transform was applied in startDrawing
     ctx.lineTo(toPoint.x, toPoint.y);
     ctx.stroke();
 
@@ -50,22 +59,23 @@ class DrawingService {
     }
   }
 
-  applyStroke(canvas: HTMLCanvasElement, stroke: Stroke): void {
+  applyStroke(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): void {
     const ctx = canvasService.getContext(canvas);
     if (!ctx) return;
 
-    // Handle bucket fill strokes - scale by DPR for mobile compatibility
+    // Handle bucket fill strokes - use current view for world->pixel mapping
     if (stroke.tool === 'bucket') {
-      const dpr = window.devicePixelRatio || 1;
-      const scaledPoint = {
-        x: stroke.from.x * dpr,
-        y: stroke.from.y * dpr,
-      };
-      floodFill(canvas, scaledPoint, stroke.color);
+      const fillPoint = canvasService.getPixelPoint(stroke.from, view || DEFAULT_VIEW, canvas);
+      floodFill(canvas, fillPoint, stroke.color);
       return;
     }
 
     ctx.save();
+
+    // Apply view transform if provided (needed for remote strokes and redo)
+    if (view) {
+      canvasService.applyViewTransform(ctx, view, canvas);
+    }
 
     ctx.strokeStyle = stroke.color;
     ctx.lineWidth = stroke.lineWidth;
@@ -100,27 +110,26 @@ class DrawingService {
     if (!ctx) return;
 
     ctx.globalCompositeOperation = 'source-over';
+
+    // Restore context to clear the view transform applied in startDrawing
+    ctx.restore();
+
     this.currentPath = null;
     this.isFloodFilling = false;
   }
 
-  private handleBucketFill(canvas: HTMLCanvasElement, point: Point, fillColor: string): void {
+  private handleBucketFill(canvas: HTMLCanvasElement, point: Point, fillColor: string, view: ViewConfig): void {
     // Prevent multiple simultaneous flood fills
     if (this.isFloodFilling) return;
 
     this.isFloodFilling = true;
 
-    // Scale point by devicePixelRatio because strokes are drawn via ctx.scale(dpr)
-    // and floodFill operates on raw imageData at pixel resolution
-    const dpr = window.devicePixelRatio || 1;
-    const scaledPoint: Point = {
-      x: point.x * dpr,
-      y: point.y * dpr,
-    };
+    // Get actual pixel coordinates for the world point under current view
+    const pixelPoint = canvasService.getPixelPoint(point, view, canvas);
 
     // Use setTimeout to make it non-blocking
     setTimeout(() => {
-      floodFill(canvas, scaledPoint, fillColor);
+      floodFill(canvas, pixelPoint, fillColor);
       this.isFloodFilling = false;
     }, 0);
   }

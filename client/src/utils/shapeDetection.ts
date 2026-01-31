@@ -186,12 +186,13 @@ function calculateCircularity(hull: Point[], center: Point): number {
 
 /**
  * Detect the shape type from a set of drawn points
+ * Returns both the shape type and a confidence score (0-1)
  */
-export function detectShape(points: Point[]): ShapeType {
+export function detectShape(points: Point[]): { shapeType: ShapeType, confidence: number } {
   // Minimum points threshold - reduced for better detection
   if (points.length < 10) {
     console.log('[Shape Detection] Too few points:', points.length);
-    return 'unknown';
+    return { shapeType: 'unknown', confidence: 0 };
   }
 
   const box = getBoundingBox(points);
@@ -200,14 +201,14 @@ export function detectShape(points: Point[]): ShapeType {
   // Ignore very small drawings
   if (boxArea < 400) {
     console.log('[Shape Detection] Drawing too small:', boxArea);
-    return 'unknown';
+    return { shapeType: 'unknown', confidence: 0 };
   }
 
   const hull = getConvexHull(points);
   const hullArea = getPolygonArea(hull);
 
   // Avoid division by zero
-  if (boxArea === 0) return 'unknown';
+  if (boxArea === 0) return { shapeType: 'unknown', confidence: 0 };
 
   const ratio = hullArea / boxArea;
   const aspectRatio = box.width / box.height;
@@ -228,41 +229,45 @@ export function detectShape(points: Point[]): ShapeType {
   // PRIORITY 1: Check for Rectangle/Square (check corners FIRST)
   // Rectangles/Squares have 4 distinct corners and high area ratio
   if (corners.length >= 3 && corners.length <= 8 && ratio >= 0.60) {
+    const confidence = Math.min(0.95, (ratio * 0.7) + (corners.length === 4 ? 0.3 : 0.1));
     // Square: aspect ratio close to 1:1
     if (aspectRatio > 0.75 && aspectRatio < 1.35) {
       console.log('[Shape Detection] ✓ Detected SQUARE');
-      return 'square';
+      return { shapeType: 'square', confidence };
     }
     // Rectangle: elongated aspect ratio
     if (aspectRatio <= 0.75 || aspectRatio >= 1.35) {
       console.log('[Shape Detection] ✓ Detected RECTANGLE');
-      return 'rectangle';
+      return { shapeType: 'rectangle', confidence };
     }
   }
 
   // Fallback rectangle/square detection: high area ratio even with few corners
   if (ratio >= 0.78 && hull.length >= 4) {
+    const confidence = ratio * 0.9;
     if (aspectRatio > 0.75 && aspectRatio < 1.35) {
       console.log('[Shape Detection] ✓ Detected SQUARE (area-based)');
-      return 'square';
+      return { shapeType: 'square', confidence };
     }
     if (aspectRatio <= 0.75 || aspectRatio >= 1.35) {
       console.log('[Shape Detection] ✓ Detected RECTANGLE (area-based)');
-      return 'rectangle';
+      return { shapeType: 'rectangle', confidence };
     }
   }
 
   // PRIORITY 2: Check for Triangle
   // Triangles have 3 corners and moderate area ratio
   if (corners.length >= 2 && corners.length <= 5 && ratio >= 0.25 && ratio < 0.7) {
+    const confidence = 0.8;
     console.log('[Shape Detection] ✓ Detected TRIANGLE (corners)');
-    return 'triangle';
+    return { shapeType: 'triangle', confidence };
   }
 
   // Additional triangle check: low area ratio with few hull points
   if (hull.length >= 3 && hull.length <= 10 && ratio >= 0.2 && ratio < 0.65) {
+    const confidence = 0.7;
     console.log('[Shape Detection] ✓ Detected TRIANGLE (hull)');
-    return 'triangle';
+    return { shapeType: 'triangle', confidence };
   }
 
   // PRIORITY 3: Check for Circle (LAST, with strict circularity)
@@ -273,13 +278,13 @@ export function detectShape(points: Point[]): ShapeType {
   // Circles must have HIGH circularity, reasonable aspect ratio, and FEW corners
   if (circularity > 0.8 && aspectRatio > 0.65 && aspectRatio < 1.55 && corners.length <= 4) {
     console.log('[Shape Detection] ✓ Detected CIRCLE');
-    return 'circle';
+    return { shapeType: 'circle', confidence: circularity };
   }
 
   // Fallback circle detection with even stricter requirements
   if (circularity > 0.85 && aspectRatio > 0.75 && aspectRatio < 1.35) {
     console.log('[Shape Detection] ✓ Detected CIRCLE (strict)');
-    return 'circle';
+    return { shapeType: 'circle', confidence: circularity };
   }
 
   // FALLBACK: Best guess - always return the most likely shape
@@ -309,15 +314,15 @@ export function detectShape(points: Point[]): ShapeType {
   }
 
   // Find the highest scoring shape
-  const bestShape = Object.entries(scores).reduce((best, [shape, score]) =>
-    score > best.score ? { shape, score } : best,
-    { shape: 'circle', score: scores.circle }
+  const bestShape = (Object.entries(scores) as [ShapeType, number][]).reduce(
+    (best, [shape, score]) => (score > best.score ? { shape, score } : best),
+    { shape: 'circle' as ShapeType, score: scores.circle }
   );
 
   console.log('[Shape Detection] Scores:', scores);
   console.log('[Shape Detection] ✓ Best guess:', bestShape.shape.toUpperCase());
 
-  return bestShape.shape as ShapeType;
+  return { shapeType: bestShape.shape, confidence: bestShape.score / 100 };
 }
 
 /**

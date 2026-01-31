@@ -81,6 +81,14 @@ export function WhiteboardContainer({
     undo,
     redo,
     isConnected,
+    viewConfig,
+    zoomIn,
+    zoomOut,
+    zoomReset,
+    onWheel,
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
   } = useWhiteboard({
     roomId,
     canvasRef,
@@ -169,6 +177,10 @@ export function WhiteboardContainer({
           onUndo={undo}
           onRedo={redo}
           canDraw={canDraw}
+          viewConfig={viewConfig}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onZoomReset={zoomReset}
         />
 
         {/* Main Canvas Area */}
@@ -179,6 +191,10 @@ export function WhiteboardContainer({
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
+              onWheel={onWheel}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
               currentTool={tool}
               settings={settings}
             />

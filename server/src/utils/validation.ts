@@ -21,7 +21,7 @@ export function validatePoint(point: unknown): point is Point {
 
 export function validateTool(tool: unknown): tool is Tool {
   return typeof tool === 'string' &&
-    ['pen', 'eraser', 'bucket'].includes(tool);
+    ['pen', 'eraser', 'bucket', 'magicpen'].includes(tool);
 }
 
 export function validateColor(color: unknown): color is string {
@@ -29,7 +29,9 @@ export function validateColor(color: unknown): color is string {
 
   // Validate hex color format
   const hexRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-  return hexRegex.test(color);
+  // Allow rgb/rgba too
+  const rgbRegex = /^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(,\s*[\d.]+\s*)?\)$/;
+  return hexRegex.test(color) || rgbRegex.test(color);
 }
 
 export function validateLineWidth(lineWidth: unknown): lineWidth is number {
@@ -62,13 +64,24 @@ export function validateStroke(stroke: unknown): Stroke | null {
     return null;
   }
 
+  // Validate optional points array for magic pen
+  let points: Point[] | undefined;
+  if (Array.isArray(s.points)) {
+    if (s.points.every(p => validatePoint(p))) {
+      points = s.points as Point[];
+    }
+  }
+
   return {
-    from: s.from,
-    to: s.to,
-    color: s.color,
-    lineWidth: s.lineWidth,
-    tool: s.tool,
-    timestamp: s.timestamp || Date.now(),
+    from: s.from as Point,
+    to: s.to as Point,
+    color: s.color as string,
+    lineWidth: s.lineWidth as number,
+    tool: s.tool as Tool,
+    timestamp: (s.timestamp as number) || Date.now(),
+    strokeId: typeof s.strokeId === 'string' ? s.strokeId : undefined,
+    points,
+    shapeType: typeof s.shapeType === 'string' ? (s.shapeType as any) : undefined,
   };
 }
 

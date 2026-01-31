@@ -37,6 +37,22 @@ export interface Point {
   y: number;
 }
 
+// Zoom and Pan configuration
+export interface ViewConfig {
+  zoom: number;         // 1.0 = 100%, 0.5 = 50%, 2.0 = 200%
+  offset: Point;        // Pan offset in screen pixels
+}
+
+export const DEFAULT_VIEW: ViewConfig = {
+  zoom: 1,
+  offset: { x: 0, y: 0 },
+};
+
+export const VIEW_LIMITS = {
+  MIN_ZOOM: 0.25,
+  MAX_ZOOM: 4,
+};
+
 export interface Stroke {
   from: Point;
   to: Point;

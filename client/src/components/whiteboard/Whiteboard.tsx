@@ -8,11 +8,26 @@ interface WhiteboardProps {
   onPointerDown: (e: React.PointerEvent<HTMLCanvasElement>) => void;
   onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void;
   onPointerUp: () => void;
+  onWheel?: (e: React.WheelEvent<HTMLCanvasElement>) => void;
+  onTouchStart?: (e: React.TouchEvent<HTMLCanvasElement>) => void;
+  onTouchMove?: (e: React.TouchEvent<HTMLCanvasElement>) => void;
+  onTouchEnd?: () => void;
   currentTool?: Tool;
   settings?: RoomSettings;
 }
 export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
-  ({ onPointerDown, onPointerMove, onPointerUp, currentTool = 'pen', settings }, ref) => {
+  ({
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onWheel,
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
+    currentTool = 'pen',
+    settings
+  }, ref) => {
+
 
     useEffect(() => {
       // Previne scroll em dispositivos móveis
@@ -44,6 +59,10 @@ export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
+        onWheel={onWheel}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
         style={{
           touchAction: 'none',
           backgroundColor: settings?.backgroundColor || '#ffffff',
@@ -53,6 +72,7 @@ export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
         role="img"
       />
     );
+
   }
 );
 

@@ -11,9 +11,10 @@ class CanvasService {
   }, 1000);
 
   getPointFromEvent(e: React.PointerEvent<HTMLCanvasElement>): Point {
+    const rect = e.currentTarget.getBoundingClientRect();
     return {
-      x: e.nativeEvent.offsetX,
-      y: e.nativeEvent.offsetY,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
     };
   }
 
@@ -116,9 +117,14 @@ class CanvasService {
 
     const firstStroke = strokes[0];
 
-    // Handle bucket tool
+    // Handle bucket tool - scale by DPR for receiving fills from other devices
     if (firstStroke.tool === 'bucket') {
-      floodFill(canvas, firstStroke.from, firstStroke.color);
+      const dpr = window.devicePixelRatio || 1;
+      const scaledPoint = {
+        x: firstStroke.from.x * dpr,
+        y: firstStroke.from.y * dpr,
+      };
+      floodFill(canvas, scaledPoint, firstStroke.color);
       return;
     }
 

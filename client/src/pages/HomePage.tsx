@@ -122,7 +122,7 @@ export function HomePage(): ReactElement {
       <div className="hero">
         <h1 className="text-h1">Colaboração simplificada.</h1>
         <p className="text-body">
-          Crie, desenhe e conecte ideias no agora. Solução completa para idealizar, desenhar e compartilhar ideias em tempo real.
+          Crie, desenhe e conecte ideias agora. Solução completa para idealizar, desenhar e compartilhar ideias em tempo real.
         </p>
       </div>
 

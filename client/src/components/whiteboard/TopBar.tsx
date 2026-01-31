@@ -43,7 +43,7 @@ export function TopBar({
             </h1>
             <div className="room-info__status">
               <div className={`status-indicator ${isConnected ? 'status-indicator--connected' : 'status-indicator--offline'}`} />
-              <span className="status-text">
+              <span className="status-text hidden-mobile">
                 {isConnected ? 'Online' : 'Offline'}
               </span>
             </div>
@@ -80,7 +80,7 @@ export function TopBar({
             <Icons.Download />
           </button>
           <button className="btn btn-primary text-small">
-            Compartilhar
+            <span className="hidden-mobile">Compartilhar</span>
           </button>
         </div>
       </div>

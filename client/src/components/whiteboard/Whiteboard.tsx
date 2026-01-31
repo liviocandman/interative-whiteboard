@@ -1,5 +1,5 @@
 // client/src/components/whiteboard/Whiteboard.tsx
-import { forwardRef, useEffect, useMemo } from 'react';
+import { forwardRef, useEffect } from 'react';
 import { drawingService } from '../../services/drawingService';
 import type { Tool } from '../../types';
 import type { RoomSettings } from '../../types/room';
@@ -11,36 +11,8 @@ interface WhiteboardProps {
   currentTool?: Tool;
   settings?: RoomSettings;
 }
-
-// Canvas size presets
-const CANVAS_SIZES = {
-  small: { width: 800, height: 600 },
-  medium: { width: 1200, height: 800 },
-  large: { width: 1920, height: 1080 },
-} as const;
-
 export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
   ({ onPointerDown, onPointerMove, onPointerUp, currentTool = 'pen', settings }, ref) => {
-
-    // Calculate canvas dimensions based on settings
-    const canvasDimensions = useMemo(() => {
-      if (!settings) {
-        return {
-          width: window.innerWidth,
-          height: window.innerHeight,
-        };
-      }
-
-      if (settings.canvasSize === 'custom') {
-        return {
-          width: settings.customWidth || 1200,
-          height: settings.customHeight || 800,
-        };
-      }
-
-      // Use preset size
-      return CANVAS_SIZES[settings.canvasSize] || CANVAS_SIZES.large;
-    }, [settings]);
 
     useEffect(() => {
       // Previne scroll em dispositivos móveis
@@ -75,16 +47,8 @@ export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
         style={{
           touchAction: 'none',
           backgroundColor: settings?.backgroundColor || '#ffffff',
-          border: '1px solid #ccc',
-          borderRadius: '4px',
           cursor: cursorStyle,
-          width: canvasDimensions.width,
-          height: canvasDimensions.height,
-          maxWidth: '100%',
-          maxHeight: '100vh',
         }}
-        width={canvasDimensions.width}
-        height={canvasDimensions.height}
         aria-label="Quadro para desenhar"
         role="img"
       />
@@ -92,4 +56,4 @@ export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
   }
 );
 
-Whiteboard.displayName = 'Whiteboard';
+Whiteboard.displayName = 'Whiteboard'; 

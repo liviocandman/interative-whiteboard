@@ -54,9 +54,14 @@ class DrawingService {
     const ctx = canvasService.getContext(canvas);
     if (!ctx) return;
 
-    // Handle bucket fill strokes
+    // Handle bucket fill strokes - scale by DPR for mobile compatibility
     if (stroke.tool === 'bucket') {
-      floodFill(canvas, stroke.from, stroke.color);
+      const dpr = window.devicePixelRatio || 1;
+      const scaledPoint = {
+        x: stroke.from.x * dpr,
+        y: stroke.from.y * dpr,
+      };
+      floodFill(canvas, scaledPoint, stroke.color);
       return;
     }
 
@@ -105,9 +110,17 @@ class DrawingService {
 
     this.isFloodFilling = true;
 
+    // Scale point by devicePixelRatio because strokes are drawn via ctx.scale(dpr)
+    // and floodFill operates on raw imageData at pixel resolution
+    const dpr = window.devicePixelRatio || 1;
+    const scaledPoint: Point = {
+      x: point.x * dpr,
+      y: point.y * dpr,
+    };
+
     // Use setTimeout to make it non-blocking
     setTimeout(() => {
-      floodFill(canvas, point, fillColor);
+      floodFill(canvas, scaledPoint, fillColor);
       this.isFloodFilling = false;
     }, 0);
   }

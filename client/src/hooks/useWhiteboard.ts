@@ -369,15 +369,24 @@ export function useWhiteboard({
 
   // Responsividade do canvas
   useEffect(() => {
-    const handleResize = (): void => {
-      if (!canvasRef.current) return;
-      canvasService.resizeCanvas(canvasRef.current);
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+
+    const handleResize = () => {
+      canvasService.resizeCanvas(canvas);
+      // Redraw everything after resize because resizing clears the canvas
+      canvasService.redrawFromStrokes(canvas, localStrokes.current);
     };
 
-    window.addEventListener('resize', handleResize);
-    handleResize();
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
 
-    return () => window.removeEventListener('resize', handleResize);
+    resizeObserver.observe(canvas.parentElement || canvas);
+    handleResize(); // Initial call
+
+    return () => resizeObserver.disconnect();
   }, [canvasRef]);
 
   // Optimistic undo - apply locally first, then sync with server

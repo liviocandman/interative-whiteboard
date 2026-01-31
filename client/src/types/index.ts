@@ -1,5 +1,5 @@
 // shared/types/index.ts
-export type Tool = 'pen' | 'magicpen' | 'bucket' | 'eraser' | 'text' | 'select';
+export type Tool = 'pen' | 'magicpen' | 'bucket' | 'eraser' | 'hand' | 'text' | 'select';
 
 export interface ToolConfig {
   id: Tool;

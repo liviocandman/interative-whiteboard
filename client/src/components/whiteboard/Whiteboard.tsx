@@ -14,6 +14,7 @@ interface WhiteboardProps {
   onTouchEnd?: () => void;
   currentTool?: Tool;
   settings?: RoomSettings;
+  isPanning?: boolean;
 }
 export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
   ({
@@ -25,7 +26,8 @@ export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
     onTouchMove,
     onTouchEnd,
     currentTool = 'pen',
-    settings
+    settings,
+    isPanning = false
   }, ref) => {
 
 
@@ -45,7 +47,7 @@ export const Whiteboard = forwardRef<HTMLCanvasElement, WhiteboardProps>(
     }, []);
 
     // Get cursor style based on current tool
-    const cursorStyle = drawingService.getToolCursor(currentTool);
+    const cursorStyle = drawingService.getToolCursor(currentTool, isPanning);
 
     // Apply grid CSS class conditionally
     const canvasClassName = `whiteboard-canvas ${settings?.enableGrid ? 'grid-enabled' : ''

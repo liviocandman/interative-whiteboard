@@ -34,6 +34,7 @@ interface UseWhiteboardReturn {
   zoomIn: () => void;
   zoomOut: () => void;
   zoomReset: () => void;
+  isPanning: boolean;
 }
 
 export function useWhiteboard({
@@ -64,10 +65,18 @@ export function useWhiteboard({
   const [viewConfig, setViewConfig] = useState<ViewConfig>(DEFAULT_VIEW);
   const viewConfigRef = useRef<ViewConfig>(viewConfig);
   const isPanning = useRef(false);
+  const [isPanningState, setIsPanningState] = useState(false);
   const pendingSegments = useRef<Stroke[]>([]);
   const touchStartDist = useRef<number | null>(null);
   const touchStartCenter = useRef<Point | null>(null);
   const touchStartView = useRef<ViewConfig | null>(null);
+  const lastPanPoint = useRef<Point | null>(null); // Last screen point for Hand tool panning
+
+  // Sync isPanning ref with state for UI feedback
+  const setPanning = useCallback((val: boolean) => {
+    isPanning.current = val;
+    setIsPanningState(val);
+  }, []);
 
   // Sync ref with state to avoid stale closures and unnecessary effect re-runs
   useEffect(() => {
@@ -98,7 +107,18 @@ export function useWhiteboard({
     const point = canvasService.getPointFromEvent(e, viewConfigRef.current);
 
     // Generate a unique strokeId for this drawing gesture
-    currentStrokeId.current = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    currentStrokeId.current = crypto.randomUUID();
+
+    // Handle Hand tool (Panning)
+    if (tool === 'hand') {
+      const rect = canvasRef.current.getBoundingClientRect();
+      lastPanPoint.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+      setPanning(true);
+      return;
+    }
 
     // Handle bucket tool differently - it's a one-click operation
     if (tool === 'bucket') {
@@ -147,6 +167,28 @@ export function useWhiteboard({
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
     if (tool === 'bucket') return;
 
+    if (tool === 'hand' && isPanning.current && lastPanPoint.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const currentPoint = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+
+      const dx = currentPoint.x - lastPanPoint.current.x;
+      const dy = currentPoint.y - lastPanPoint.current.y;
+
+      setViewConfig(prev => ({
+        ...prev,
+        offset: {
+          x: prev.offset.x + dx,
+          y: prev.offset.y + dy,
+        }
+      }));
+
+      lastPanPoint.current = currentPoint;
+      return;
+    }
+
     if (!isDrawing.current || !lastPoint.current || !canvasRef.current) return;
 
     // Convert screen point to world coordinates
@@ -189,6 +231,12 @@ export function useWhiteboard({
 
   const onPointerUp = useCallback((): void => {
     if (tool === 'bucket') return;
+
+    if (tool === 'hand') {
+      setPanning(false);
+      lastPanPoint.current = null;
+      return;
+    }
 
     if (!isDrawing.current || !canvasRef.current) return;
 
@@ -580,7 +628,7 @@ export function useWhiteboard({
       touchStartDist.current = Math.hypot(p1.x - p2.x, p1.y - p2.y);
       touchStartCenter.current = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
       touchStartView.current = viewConfig;
-      isPanning.current = true;
+      setPanning(true);
       isDrawing.current = false; // Cancel any active drawing
       drawingService.finishDrawing(e.currentTarget);
     }
@@ -619,8 +667,8 @@ export function useWhiteboard({
     touchStartDist.current = null;
     touchStartCenter.current = null;
     touchStartView.current = null;
-    isPanning.current = false;
-  }, []);
+    setPanning(false);
+  }, [setPanning]);
 
   // Redraw when view config changes
   useEffect(() => {
@@ -644,5 +692,6 @@ export function useWhiteboard({
     zoomIn,
     zoomOut,
     zoomReset,
+    isPanning: isPanningState,
   };
 }

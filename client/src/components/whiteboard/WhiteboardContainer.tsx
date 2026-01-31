@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback } from 'react';
 import { Whiteboard } from './Whiteboard';
 import { TopBar } from './TopBar';
 import { LeftSidebar } from './LeftSidebar';
+import { ZoomControls } from './ZoomControls';
 import { useWhiteboard } from '../../hooks/useWhiteboard';
 import type { Tool, User } from '../../types';
 import type { Room, RoomSettings } from '../../types/room';
@@ -89,6 +90,7 @@ export function WhiteboardContainer({
     onTouchStart,
     onTouchMove,
     onTouchEnd,
+    isPanning,
   } = useWhiteboard({
     roomId,
     canvasRef,
@@ -165,7 +167,6 @@ export function WhiteboardContainer({
       />
 
       <div className="whiteboard-content">
-        {/* Floating Tools Sidebar */}
         <LeftSidebar
           currentTool={tool}
           onToolChange={handleToolChange}
@@ -177,6 +178,10 @@ export function WhiteboardContainer({
           onUndo={undo}
           onRedo={redo}
           canDraw={canDraw}
+        />
+
+        {/* Floating Zoom Controls */}
+        <ZoomControls
           viewConfig={viewConfig}
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
@@ -197,6 +202,7 @@ export function WhiteboardContainer({
               onTouchEnd={onTouchEnd}
               currentTool={tool}
               settings={settings}
+              isPanning={isPanning}
             />
           </div>
         </div>

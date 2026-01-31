@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type ReactElement } from 'react';
 import { StrokeWidthSlider } from '../ui/StrokeWidthSlider';
 import { Icons } from '../ui/Icons';
-import type { Tool, ViewConfig } from '../../types';
+import type { Tool } from '../../types';
 import './LeftSidebar.css';
 
 interface LeftSidebarProps {
@@ -15,11 +15,6 @@ interface LeftSidebarProps {
   onUndo: () => void;
   onRedo: () => void;
   canDraw?: boolean;
-  // Zoom controls
-  viewConfig?: ViewConfig;
-  onZoomIn?: () => void;
-  onZoomOut?: () => void;
-  onZoomReset?: () => void;
 }
 
 export function LeftSidebar({
@@ -33,10 +28,6 @@ export function LeftSidebar({
   onUndo,
   onRedo,
   canDraw = true,
-  viewConfig,
-  onZoomIn,
-  onZoomOut,
-  onZoomReset,
 }: LeftSidebarProps): ReactElement {
   const [isStrokeWidthOpen, setIsStrokeWidthOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -65,6 +56,7 @@ export function LeftSidebar({
 
   const tools = [
     { id: 'pen', icon: Icons.Pen, label: 'Caneta' },
+    { id: 'hand', icon: Icons.Hand, label: 'Mover' },
     { id: 'magicpen', icon: Icons.MagicWand, label: 'Caneta Mágica' },
     { id: 'eraser', icon: Icons.Eraser, label: 'Borracha' },
     { id: 'bucket', icon: Icons.Fill, label: 'Preencher' },
@@ -237,39 +229,6 @@ export function LeftSidebar({
         >
           <Icons.Redo />
         </button>
-
-        <div className="tool-divider" />
-
-        {/* Zoom Controls */}
-        {viewConfig && (
-          <div className="zoom-controls">
-            <button
-              onClick={onZoomOut}
-              onTouchEnd={(e) => { e.preventDefault(); onZoomOut?.(); }}
-              className="tool-btn"
-              title="Zoom Out"
-            >
-              <Icons.ZoomOut />
-            </button>
-            <span className="zoom-level">{Math.round(viewConfig.zoom * 100)}%</span>
-            <button
-              onClick={onZoomIn}
-              onTouchEnd={(e) => { e.preventDefault(); onZoomIn?.(); }}
-              className="tool-btn"
-              title="Zoom In"
-            >
-              <Icons.ZoomIn />
-            </button>
-            <button
-              onClick={onZoomReset}
-              onTouchEnd={(e) => { e.preventDefault(); onZoomReset?.(); }}
-              className="tool-btn"
-              title="Reset Zoom"
-            >
-              <Icons.ZoomReset />
-            </button>
-          </div>
-        )}
 
         <div className="tool-divider" />
 

@@ -144,12 +144,17 @@ class DrawingService {
   }
 
   // Get current tool cursor style
-  getToolCursor(tool: Tool): string {
+  getToolCursor(tool: Tool, isPanning: boolean = false): string {
+    if (isPanning || tool === 'hand') {
+      return isPanning ? 'grabbing' : 'grab';
+    }
+
     switch (tool) {
       case 'pen':
+      case 'magicpen':
         return 'crosshair';
       case 'eraser':
-        return 'grab';
+        return 'grab'; // Eraser also uses grab, maybe we should find a better one later
       case 'bucket':
         return 'url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEwIDJMMTMgNUwxMS41IDYuNUwxNyA5TDE5IDEzTDE3IDE5SDdMNSAxM0w3IDlMMTIuNSA2LjVMMTAgMloiIGZpbGw9IiMzNzQxNTEiLz4KPC9zdmc+") 12 12, auto';
       default:

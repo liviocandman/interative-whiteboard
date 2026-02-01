@@ -59,14 +59,14 @@ class DrawingService {
     }
   }
 
-  applyStroke(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): void {
+  async applyStroke(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): Promise<void> {
     const ctx = canvasService.getContext(canvas);
     if (!ctx) return;
 
     // Handle bucket fill strokes - use current view for world->pixel mapping
     if (stroke.tool === 'bucket') {
       const fillPoint = canvasService.getPixelPoint(stroke.from, view || DEFAULT_VIEW, canvas);
-      floodFill(canvas, fillPoint, stroke.color);
+      await floodFill(canvas, fillPoint, stroke.color); // Properly await the worker
       return;
     }
 
@@ -118,7 +118,7 @@ class DrawingService {
     this.isFloodFilling = false;
   }
 
-  private handleBucketFill(canvas: HTMLCanvasElement, point: Point, fillColor: string, view: ViewConfig): void {
+  private async handleBucketFill(canvas: HTMLCanvasElement, point: Point, fillColor: string, view: ViewConfig): Promise<void> {
     // Prevent multiple simultaneous flood fills
     if (this.isFloodFilling) return;
 
@@ -127,11 +127,13 @@ class DrawingService {
     // Get actual pixel coordinates for the world point under current view
     const pixelPoint = canvasService.getPixelPoint(point, view, canvas);
 
-    // Use setTimeout to make it non-blocking
-    setTimeout(() => {
-      floodFill(canvas, pixelPoint, fillColor);
+    try {
+      await floodFill(canvas, pixelPoint, fillColor);
+    } catch (error) {
+      console.error('[DrawingService] Flood fill failed:', error);
+    } finally {
       this.isFloodFilling = false;
-    }, 0);
+    }
   }
 
   private setupDrawingContext(ctx: CanvasRenderingContext2D, options: DrawingOptions): void {

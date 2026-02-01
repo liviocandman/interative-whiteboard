@@ -1,63 +1,71 @@
 import type { Point } from '../types';
 
-export function floodFill(canvas: HTMLCanvasElement, point: Point, fillColor: string, tolerance: number = 20): void {
-  const ctx = canvas.getContext('2d');
+let worker: Worker | null = null;
+
+function getWorker(): Worker {
+  if (!worker) {
+    // Vite-specific worker instantiation
+    // @ts-ignore - Vite worker import
+    worker = new Worker(new URL('../workers/fill.worker.ts', import.meta.url), {
+      type: 'module'
+    });
+  }
+  return worker;
+}
+
+/**
+ * Flood fill algorithm using a Web Worker for better performance.
+ * @returns Promise that resolves when the fill is complete and applied to the canvas.
+ */
+export async function floodFill(canvas: HTMLCanvasElement, point: Point, fillColor: string, tolerance: number = 20): Promise<void> {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
 
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const width = canvas.width;
+  const height = canvas.height;
+  const imageData = ctx.getImageData(0, 0, width, height);
+
   const targetColor = getPixelColor(imageData, Math.floor(point.x), Math.floor(point.y));
   const replacementColor = hexToRgba(fillColor);
 
-  if (colorsEqual(targetColor, replacementColor, 5)) { // Use low tolerance for same-color check
+  if (colorsEqual(targetColor, replacementColor, 5)) {
     return;
   }
 
-  stackBasedFloodFill(
-    imageData,
-    Math.floor(point.x),
-    Math.floor(point.y),
-    targetColor,
-    replacementColor,
-    tolerance
-  );
+  return new Promise((resolve) => {
+    const fillWorker = getWorker();
+    const taskId = Math.random().toString(36).substring(2, 9);
 
-  ctx.putImageData(imageData, 0, 0);
-}
+    // Use Transferable Objects to move the buffer to the worker without copying (O(1))
+    const buffer = imageData.data.buffer;
 
-function stackBasedFloodFill(
-  imageData: ImageData,
-  startX: number,
-  startY: number,
-  targetColor: [number, number, number, number],
-  replacementColor: [number, number, number, number],
-  tolerance: number
-): void {
-  const width = imageData.width;
-  const height = imageData.height;
-  const stack: Point[] = [{ x: startX, y: startY }];
-  const visited = new Uint8Array(width * height);
+    fillWorker.postMessage({
+      taskId,
+      buffer: imageData.data,
+      width,
+      height,
+      startX: Math.floor(point.x),
+      startY: Math.floor(point.y),
+      targetColor,
+      replacementColor,
+      tolerance
+    }, [buffer]);
 
-  while (stack.length > 0) {
-    const { x, y } = stack.pop()!;
+    // Handle worker response to put the data back
+    const handleMessage = (e: MessageEvent) => {
+      const { taskId: returnedId, buffer: returnedBuffer } = e.data;
 
-    if (x < 0 || x >= width || y < 0 || y >= height) continue;
+      if (returnedId !== taskId) return;
 
-    const index = y * width + x;
-    if (visited[index]) continue;
-    visited[index] = 1;
+      const newImageData = new ImageData(returnedBuffer, width, height);
+      ctx.putImageData(newImageData, 0, 0);
 
-    const currentColor = getPixelColor(imageData, x, y);
-    if (!colorsEqual(currentColor, targetColor, tolerance)) continue;
+      fillWorker.removeEventListener('message', handleMessage);
+      resolve();
+    };
 
-    setPixelColor(imageData, x, y, replacementColor);
-
-    stack.push(
-      { x: x + 1, y },
-      { x: x - 1, y },
-      { x, y: y + 1 },
-      { x, y: y - 1 }
-    );
-  }
+    fillWorker.addEventListener('message', handleMessage);
+  });
 }
 
 function getPixelColor(imageData: ImageData, x: number, y: number): [number, number, number, number] {
@@ -68,19 +76,6 @@ function getPixelColor(imageData: ImageData, x: number, y: number): [number, num
     imageData.data[index + 2],
     imageData.data[index + 3],
   ];
-}
-
-function setPixelColor(
-  imageData: ImageData,
-  x: number,
-  y: number,
-  color: [number, number, number, number]
-): void {
-  const index = (y * imageData.width + x) * 4;
-  imageData.data[index] = color[0];
-  imageData.data[index + 1] = color[1];
-  imageData.data[index + 2] = color[2];
-  imageData.data[index + 3] = color[3];
 }
 
 function hexToRgba(hex: string): [number, number, number, number] {

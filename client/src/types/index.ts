@@ -53,6 +53,13 @@ export const VIEW_LIMITS = {
   MAX_ZOOM: 4,
 };
 
+export interface BoundingBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 export interface Stroke {
   from: Point;
   to: Point;
@@ -60,11 +67,9 @@ export interface Stroke {
   lineWidth: number;
   tool: Tool;
   timestamp?: number;
-  // Unique ID per drawing gesture (pointerdown to pointerup) for undo grouping
+  boundingBox?: BoundingBox;
   strokeId?: string;
-  // User ID who made the stroke
   userId?: string;
-  // For magic pen and shape tools - complete path rendering
   points?: Point[];
   shapeType?: 'circle' | 'rectangle' | 'square' | 'triangle';
 }

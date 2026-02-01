@@ -8,6 +8,7 @@ import { detectShape, getBoundingBox } from '../utils/shapeDetection';
 import { generateCirclePoints, generateRectanglePoints, generateSquarePoints, generateTrianglePoints } from '../utils/shapeGeneration';
 import type { Stroke, Tool, Point, CanvasState, ViewConfig } from '../types';
 import { DEFAULT_VIEW, VIEW_LIMITS } from '../types';
+import { generateId } from '../utils/user';
 
 interface UseWhiteboardProps {
   roomId: string;
@@ -71,6 +72,7 @@ export function useWhiteboard({
   const touchStartCenter = useRef<Point | null>(null);
   const touchStartView = useRef<ViewConfig | null>(null);
   const lastPanPoint = useRef<Point | null>(null); // Last screen point for Hand tool panning
+  const isRendering = useRef(false); // Flag to prevent concurrent render calls
 
   // Sync isPanning ref with state for UI feedback
   const setPanning = useCallback((val: boolean) => {
@@ -100,14 +102,14 @@ export function useWhiteboard({
   );
 
   // Handlers de desenho
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+  const onPointerDown = useCallback(async (e: React.PointerEvent<HTMLCanvasElement>): Promise<void> => {
     if (!canvasRef.current) return;
 
     // Convert screen point to world coordinates
     const point = canvasService.getPointFromEvent(e, viewConfigRef.current);
 
     // Generate a unique strokeId for this drawing gesture
-    currentStrokeId.current = crypto.randomUUID();
+    currentStrokeId.current = generateId();
 
     // Handle Hand tool (Panning)
     if (tool === 'hand') {
@@ -133,7 +135,10 @@ export function useWhiteboard({
         userId: socket.id, // Add userId for undo tracking
       };
 
-      drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
+      // Calculate Bounding Box
+      stroke.boundingBox = canvasService.calculateBoundingBox(stroke);
+
+      await drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
       socket.emit('drawing', stroke); // Emit directly, bucket is single-shot
       localStrokes.current.push(stroke); // Track locally for undo
 
@@ -220,6 +225,9 @@ export function useWhiteboard({
         userId: socket.id, // Add userId for undo tracking
       };
 
+      // Calculate Bounding Box
+      stroke.boundingBox = canvasService.calculateBoundingBox(stroke);
+
       pendingSegments.current.push(stroke);
       throttledDraw.current();
       localStrokes.current.push(stroke); // Track locally for undo
@@ -294,6 +302,9 @@ export function useWhiteboard({
           userId: socket.id,
         };
 
+        // Calculate Bounding Box
+        perfectStroke.boundingBox = canvasService.calculateBoundingBox(perfectStroke);
+
         // Draw perfect shape locally
         drawingService.applyStroke(canvasRef.current, perfectStroke, viewConfigRef.current);
 
@@ -342,11 +353,26 @@ export function useWhiteboard({
       if (!canvasRef.current) return;
 
       // Prevent adding our own strokes back into localStrokes if we are the sender
-      // The server broadcasts to everyone, but we already have our own strokes in localStrokes.current
       if (stroke.userId === socket.id) return;
 
-      // Add stroke to local array
-      localStrokes.current.push(stroke);
+      // Ensure remote stroke has a bounding box if missing
+      if (!stroke.boundingBox) {
+        stroke.boundingBox = canvasService.calculateBoundingBox(stroke);
+      }
+
+      // Ensure localStrokes stays sorted by timestamp
+      // Most of the time, strokes arrive in order, so we check the last element first
+      if (localStrokes.current.length === 0 ||
+        (stroke.timestamp || 0) >= (localStrokes.current[localStrokes.current.length - 1].timestamp || 0)) {
+        localStrokes.current.push(stroke);
+      } else {
+        // Find correct insertion point (backward search is usually faster for slight delays)
+        let i = localStrokes.current.length - 1;
+        while (i >= 0 && (localStrokes.current[i].timestamp || 0) > (stroke.timestamp || 0)) {
+          i--;
+        }
+        localStrokes.current.splice(i + 1, 0, stroke);
+      }
 
       // If stroke has a strokeId, redraw just that stroke group for smooth appearance
       if (stroke.strokeId) {
@@ -362,9 +388,16 @@ export function useWhiteboard({
     const handleInitialState = (state: CanvasState): void => {
       if (!canvasRef.current) return;
       console.log('[useWhiteboard] Received initialState, restoring canvas...');
-      canvasService.restoreCanvasState(canvasRef.current, state, viewConfigRef.current);
-      // Store strokes locally for efficient undo/redo
-      localStrokes.current = [...state.strokes];
+
+      // Ensure all initial strokes have bounding boxes
+      state.strokes.forEach(s => {
+        if (!s.boundingBox) s.boundingBox = canvasService.calculateBoundingBox(s);
+      });
+
+      // Ensure initial state strokes are sorted (they should be, but let's be safe)
+      const sortedStrokes = [...state.strokes].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      localStrokes.current = sortedStrokes;
+      canvasService.restoreCanvasState(canvasRef.current, { ...state, strokes: sortedStrokes }, viewConfigRef.current);
     };
 
     const handleStrokeRemoved = (data: { strokeId: string; userId: string }): void => {
@@ -386,6 +419,9 @@ export function useWhiteboard({
       console.log('[useWhiteboard] Received strokeAdded event:', data.strokeId, 'with', data.strokes.length, 'strokes');
 
       // Add all strokes to local array
+      data.strokes.forEach(s => {
+        if (!s.boundingBox) s.boundingBox = canvasService.calculateBoundingBox(s);
+      });
       localStrokes.current.push(...data.strokes);
 
       // Apply each stroke to canvas
@@ -670,10 +706,35 @@ export function useWhiteboard({
     setPanning(false);
   }, [setPanning]);
 
-  // Redraw when view config changes
+  // Redraw when view config changes - Throttled with rAF
   useEffect(() => {
-    if (!canvasRef.current) return;
-    canvasService.redrawFromStrokes(canvasRef.current, localStrokes.current, viewConfig);
+    if (!canvasRef.current || isRendering.current) return;
+
+    let rafId: number;
+    const render = async () => {
+      if (!canvasRef.current) return;
+      isRendering.current = true;
+
+      // 🚀 Phase 2: Try to use Offscreen Baking
+      const bakedCanvas = await canvasService.getBakedCanvas(canvasRef.current, localStrokes.current, viewConfig);
+
+      if (bakedCanvas) {
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          canvasService.clearCanvas(canvasRef.current);
+          ctx.drawImage(bakedCanvas, 0, 0);
+          console.log('[useWhiteboard] Redrawn using offscreen buffer');
+        }
+      } else {
+        // Fallback to full redraw if baking fails or first frame
+        await canvasService.redrawFromStrokes(canvasRef.current, localStrokes.current, viewConfig);
+      }
+
+      isRendering.current = false;
+    };
+
+    rafId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(rafId);
   }, [canvasRef, viewConfig]);
 
   return {

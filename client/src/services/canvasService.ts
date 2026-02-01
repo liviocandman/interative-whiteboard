@@ -1,8 +1,7 @@
-// client/src/services/canvasService.ts
 import { socket } from './socket';
 import { debounce } from '../utils/throttle';
 import { floodFill } from './fillService';
-import type { Point, CanvasState, Stroke, ViewConfig } from '../types';
+import type { Point, CanvasState, Stroke, ViewConfig, BoundingBox } from '../types';
 import { DEFAULT_VIEW, VIEW_LIMITS } from '../types';
 
 class CanvasService {
@@ -10,6 +9,11 @@ class CanvasService {
     const dataURL = canvas.toDataURL();
     socket.emit('saveState', dataURL);
   }, 1000);
+
+  private offscreenCanvas: HTMLCanvasElement | null = null;
+  private offscreenView: ViewConfig | null = null;
+  private isBaking = false;
+  private currentBakePromise: Promise<void> | null = null;
 
   // Convert screen coordinates to world coordinates
   screenToWorld(screen: Point, view: ViewConfig): Point {
@@ -27,12 +31,65 @@ class CanvasService {
     };
   }
 
+  calculateBoundingBox(stroke: Stroke): BoundingBox {
+    let minX = stroke.from.x;
+    let minY = stroke.from.y;
+    let maxX = stroke.to.x;
+    let maxY = stroke.to.y;
+
+    if (stroke.points && stroke.points.length > 0) {
+      stroke.points.forEach(p => {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      });
+    }
+
+    // Add padding for line width (in world space)
+    const padding = stroke.lineWidth / 2;
+    return {
+      minX: minX - padding,
+      minY: minY - padding,
+      maxX: maxX + padding,
+      maxY: maxY + padding,
+    };
+  }
+
+  isStrokeVisible(stroke: Stroke, view: ViewConfig, canvasWidth: number, canvasHeight: number): boolean {
+    // Bucket fills should never be culled because their bitmap impact can span the whole canvas
+    if (stroke.tool === 'bucket') return true;
+
+    if (!stroke.boundingBox) return true; // Fallback if no box
+
+    // Convert view bounds to world space
+    const visualBounds = {
+      minX: -view.offset.x / view.zoom,
+      minY: -view.offset.y / view.zoom,
+      maxX: (canvasWidth - view.offset.x) / view.zoom,
+      maxY: (canvasHeight - view.offset.y) / view.zoom,
+    };
+
+    // Add padding to avoid aggressive pop-in (100px on each side)
+    const padding = 100 / view.zoom;
+
+    return !(
+      stroke.boundingBox.maxX < visualBounds.minX - padding ||
+      stroke.boundingBox.minX > visualBounds.maxX + padding ||
+      stroke.boundingBox.maxY < visualBounds.minY - padding ||
+      stroke.boundingBox.minY > visualBounds.maxY + padding
+    );
+  }
+
   // Apply view transform to canvas context before drawing
   // Incorporates DPR, View Offset, and Zoom into a single transformation matrix
   applyViewTransform(ctx: CanvasRenderingContext2D, view: ViewConfig, canvas: HTMLCanvasElement): void {
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+
+    // Fallback scaling for offscreen canvases where getBoundingClientRect() returns all zeros
+    const dpr = window.devicePixelRatio || 1;
+    const scaleX = rect.width > 0 ? (canvas.width / rect.width) : dpr;
+    const scaleY = rect.height > 0 ? (canvas.height / rect.height) : dpr;
 
     // Reset and apply scaling chain: Context coordinates -> DPI Scale -> View Offset -> Zoom
     ctx.setTransform(1, 0, 0, 1, 0, 0); // Identity
@@ -60,9 +117,10 @@ class CanvasService {
     const rect = canvas.getBoundingClientRect();
 
     // Calculate the actual scale between CSS pixels and the canvas buffer
-    // This is more robust than window.devicePixelRatio
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    // Fallback to DPR for offscreen canvases
+    const dpr = window.devicePixelRatio || 1;
+    const scaleX = rect.width > 0 ? (canvas.width / rect.width) : dpr;
+    const scaleY = rect.height > 0 ? (canvas.height / rect.height) : dpr;
 
     return {
       x: screen.x * scaleX,
@@ -139,12 +197,12 @@ class CanvasService {
    * More efficient than full restoreCanvasState as it doesn't need initial state fetch
    * @param view - Optional view config for zoom/pan transformation
    */
-  redrawFromStrokes(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): void {
+  async redrawFromStrokes(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): Promise<void> {
     this.clearCanvas(canvas);
-    this.applyStrokes(canvas, strokes, view);
+    await this.applyStrokes(canvas, strokes, view);
   }
 
-  applyStrokes(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): void {
+  async applyStrokes(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): Promise<void> {
     const ctx = canvas.getContext('2d');
     if (!ctx || strokes.length === 0) return;
 
@@ -153,36 +211,80 @@ class CanvasService {
       this.applyViewTransform(ctx, view, canvas);
     }
 
-    // Sort all strokes by timestamp to ensure strictly chronological rendering
-    // This is crucial for layering (e.g., bucket fill on top of a shape)
-    const sortedStrokes = [...strokes].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-    // Grouping for performance, but we must respect time
-    // If we have a mix of tools, we might need to break groups to respect time
-    // For now, let's render them as they come, identifying groups
+    // Performance: We now assume strokes are pre-sorted for chronological rendering.
+    const sortedStrokes = strokes;
     const processedIds = new Set<string>();
 
-    sortedStrokes.forEach((stroke) => {
+    for (const stroke of sortedStrokes) {
+      // Viewport Culling
+      if (view && !this.isStrokeVisible(stroke, view, canvas.width, canvas.height)) {
+        continue;
+      }
+
       if (stroke.strokeId && !processedIds.has(stroke.strokeId)) {
         // Find all other strokes in this group
         const group = sortedStrokes.filter(s => s.strokeId === stroke.strokeId);
-        this.drawStrokeGroup(canvas, group, view);
+        await this.drawStrokeGroup(canvas, group, view);
         processedIds.add(stroke.strokeId);
       } else if (!stroke.strokeId) {
         // Ungrouped individual stroke
-        this.drawStroke(canvas, stroke, view);
+        await this.drawStroke(canvas, stroke, view);
       }
-    });
+    }
 
     if (view) {
       ctx.restore();
     }
   }
 
-  /**
-   * Draw a group of strokes with the same strokeId as a single continuous path
-   */
-  private drawStrokeGroup(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): void {
+  //Offscreen Baking (Double Buffering)
+  async getBakedCanvas(canvas: HTMLCanvasElement, strokes: Stroke[], view: ViewConfig): Promise<HTMLCanvasElement | null> {
+    // If we are currently baking, wait for it to finish
+    if (this.currentBakePromise) {
+      await this.currentBakePromise;
+    }
+
+    // If view changed significantly or first time, we need to rebake
+    const viewChanged = !this.offscreenView ||
+      Math.abs(this.offscreenView.zoom - view.zoom) > 0.1 ||
+      Math.abs(this.offscreenView.offset.x - view.offset.x) > 10 ||
+      Math.abs(this.offscreenView.offset.y - view.offset.y) > 10;
+
+    if (!this.offscreenCanvas || viewChanged) {
+      await this.bakeToOffscreen(canvas, strokes, view);
+    }
+
+    return this.offscreenCanvas;
+  }
+
+  private async bakeToOffscreen(canvas: HTMLCanvasElement, strokes: Stroke[], view: ViewConfig): Promise<void> {
+    if (this.isBaking) return;
+    this.isBaking = true;
+
+    this.currentBakePromise = (async () => {
+      if (!this.offscreenCanvas) {
+        this.offscreenCanvas = document.createElement('canvas');
+      }
+
+      // Match size to main canvas
+      this.offscreenCanvas.width = canvas.width;
+      this.offscreenCanvas.height = canvas.height;
+
+      const ctx = this.offscreenCanvas.getContext('2d');
+      if (ctx) {
+        this.clearCanvas(this.offscreenCanvas);
+        await this.applyStrokes(this.offscreenCanvas, strokes, view);
+        this.offscreenView = { ...view };
+      }
+    })();
+
+    await this.currentBakePromise;
+    this.currentBakePromise = null;
+    this.isBaking = false;
+  }
+
+  // Draw a group of strokes with the same strokeId as a single continuous path
+  private async drawStrokeGroup(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): Promise<void> {
     if (strokes.length === 0) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -192,8 +294,9 @@ class CanvasService {
     // Handle bucket tool
     if (firstStroke.tool === 'bucket') {
       // Bucket fill needs raw pixel coordinates for imageData
-      const fillPoint = this.getPixelPoint(firstStroke.from, view || DEFAULT_VIEW, canvas);
-      floodFill(canvas, fillPoint, firstStroke.color);
+      const activeView = view || this.offscreenView || DEFAULT_VIEW;
+      const fillPoint = this.getPixelPoint(firstStroke.from, activeView, canvas);
+      await floodFill(canvas, fillPoint, firstStroke.color);
       return;
     }
 
@@ -223,14 +326,15 @@ class CanvasService {
     ctx.restore();
   }
 
-  private drawStroke(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): void {
+  private async drawStroke(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): Promise<void> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     // Handle bucket tool
     if (stroke.tool === 'bucket') {
-      const fillPoint = this.getPixelPoint(stroke.from, view || DEFAULT_VIEW, canvas);
-      floodFill(canvas, fillPoint, stroke.color);
+      const activeView = view || this.offscreenView || DEFAULT_VIEW;
+      const fillPoint = this.getPixelPoint(stroke.from, activeView, canvas);
+      await floodFill(canvas, fillPoint, stroke.color);
       return;
     }
 

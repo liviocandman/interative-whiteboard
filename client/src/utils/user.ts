@@ -4,7 +4,11 @@ const USER_ID_KEY = 'whiteboard_user_id';
  * Generate a UUID-like string using Math.random() as fallback
  * when crypto.randomUUID is not available (non-secure contexts)
  */
-function generateFallbackUUID(): string {
+export function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -21,10 +25,7 @@ export function getPersistentUserId(): string {
   let userId = localStorage.getItem(USER_ID_KEY);
 
   if (!userId) {
-    // Use crypto.randomUUID if available (secure contexts), otherwise fallback
-    userId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : generateFallbackUUID();
+    userId = generateId();
     localStorage.setItem(USER_ID_KEY, userId);
   }
 

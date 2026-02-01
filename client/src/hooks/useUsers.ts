@@ -28,13 +28,25 @@ export function useUsers(): UseUsersReturn {
     }
 
     // Wait a moment for socket.id to be available
+    let retryCount = 0;
+    const MAX_RETRIES = 50; // 5 seconds total
+
     const createUser = () => {
       if (!socket.id) {
-        console.error('[useUsers] Socket ID not available yet, retrying...');
-        setTimeout(createUser, 100);
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          console.error(`[useUsers] Socket ID not available yet (attempt ${retryCount}), retrying...`);
+          setTimeout(createUser, 100);
+        } else {
+          console.warn('[useUsers] Socket failed to connect after several attempts. Proceeding with local setup anyway.');
+          finalizeUser();
+        }
         return;
       }
+      finalizeUser();
+    };
 
+    const finalizeUser = () => {
       const user: User = {
         id: persistentUserId,
         name,
@@ -45,13 +57,14 @@ export function useUsers(): UseUsersReturn {
         isOnline: true,
       };
 
-      console.log('[useUsers] Created user:', user);
+      console.log('[useUsers] Finalized user:', user);
       setCurrentUser(user);
       setIsSettingUp(false);
 
-      // Send user data to server with persistent userId
-      console.log('[useUsers] Emitting userSetup to server');
-      socket.emit('userSetup', { userId: persistentUserId, name, color });
+      if (socket.connected) {
+        console.log('[useUsers] Emitting userSetup to server');
+        socket.emit('userSetup', { userId: persistentUserId, name, color });
+      }
     };
 
     createUser();

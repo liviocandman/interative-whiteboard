@@ -1,7 +1,6 @@
 import { io, Socket } from "socket.io-client";
+import { getBackendUrl } from "../utils/config";
 
-const URL = import.meta.env.VITE_BACKEND_URL;
-
-export const socket: Socket = io(URL, {
-  autoConnect: false, 
+export const socket: Socket = io(getBackendUrl(), {
+  autoConnect: false,
 });

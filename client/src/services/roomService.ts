@@ -1,7 +1,8 @@
 import type { Room, RoomStats, CreateRoomData, JoinRoomData } from '../types/room';
+import { getBackendUrl } from '../utils/config';
 
 class RoomService {
-  private baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
+  private baseUrl = getBackendUrl();
 
   async getRooms(): Promise<Room[]> {
     try {

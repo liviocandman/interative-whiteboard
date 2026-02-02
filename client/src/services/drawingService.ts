@@ -43,13 +43,15 @@ class DrawingService {
     }
   }
 
-  continueDrawing(canvas: HTMLCanvasElement, toPoint: Point, options: DrawingOptions): void {
+  continueDrawing(canvas: HTMLCanvasElement, fromPoint: Point, toPoint: Point, options: DrawingOptions): void {
     if (options.tool === 'bucket' || this.isFloodFilling) return; // Bucket is one-click only
 
     const ctx = canvasService.getContext(canvas);
     if (!ctx) return;
 
-    // Line is drawn in world space because the transform was applied in startDrawing
+    // Rebuild the path for every segment to be isolated from other concurrent drawing operations (remote strokes or multi-touch).
+    ctx.beginPath();
+    ctx.moveTo(fromPoint.x, fromPoint.y);
     ctx.lineTo(toPoint.x, toPoint.y);
     ctx.stroke();
 

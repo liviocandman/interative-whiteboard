@@ -103,8 +103,8 @@ export function WhiteboardContainer({
     originalOnPointerDown(e);
   }, [originalOnPointerDown]);
 
-  const onPointerUp = useCallback(() => {
-    originalOnPointerUp();
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    originalOnPointerUp(e);
   }, [originalOnPointerUp]);
 
   // Handlers

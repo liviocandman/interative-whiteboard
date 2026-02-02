@@ -21,7 +21,7 @@ interface UseWhiteboardProps {
 interface UseWhiteboardReturn {
   onPointerDown: (e: React.PointerEvent<HTMLCanvasElement>) => void;
   onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void;
-  onPointerUp: () => void;
+  onPointerUp: (e: React.PointerEvent<HTMLCanvasElement>) => void;
   onWheel: (e: React.WheelEvent<HTMLCanvasElement>) => void;
   onTouchStart: (e: React.TouchEvent<HTMLCanvasElement>) => void;
   onTouchMove: (e: React.TouchEvent<HTMLCanvasElement>) => void;
@@ -59,6 +59,9 @@ export function useWhiteboard({
   const lastUndoTime = useRef<number>(0);
   const lastRedoTime = useRef<number>(0);
   const UNDO_REDO_DEBOUNCE_MS = 100; // Reduced to 100ms for faster operations
+
+  // Lock drawing to a single active finger/pointer to prevent multi-touch interference
+  const activePointerId = useRef<number | null>(null);
 
   const [isConnected, setIsConnected] = useState(false);
 
@@ -103,6 +106,13 @@ export function useWhiteboard({
   const onPointerDown = useCallback(async (e: React.PointerEvent<HTMLCanvasElement>): Promise<void> => {
     if (!canvasRef.current) return;
 
+    // Multi-touch Isolation
+    if (activePointerId.current !== null) return;
+    activePointerId.current = e.pointerId;
+
+    // Capture the pointer to ensure Move/Up events are sent even if the finger leaves the element
+    e.currentTarget.setPointerCapture(e.pointerId);
+
     // Convert screen point to world coordinates
     const point = canvasService.getPointFromEvent(e, viewConfigRef.current);
 
@@ -122,6 +132,7 @@ export function useWhiteboard({
 
     // Handle bucket tool differently - it's a one-click operation
     if (tool === 'bucket') {
+      // Bucket is atomic, we can release the pointer quickly but we'll wait for Up for consistency
       const stroke: Stroke = {
         from: point,
         to: point,
@@ -136,8 +147,7 @@ export function useWhiteboard({
       // Calculate Bounding Box
       stroke.boundingBox = canvasService.calculateBoundingBox(stroke);
 
-      // 🛡️ Phase 6 Fix: Ensure world raster is synced with existing strokes 
-      // BEFORE performing the fill, otherwise it will leak through missing lines.
+      // Ensure world raster is synced with existing strokes 
       await canvasService.ensureWorldRaster(localStrokes.current);
 
       await drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
@@ -168,11 +178,14 @@ export function useWhiteboard({
       point: lastPoint.current,
       view: viewConfigRef.current, // Pass current view for coordinate mapping
     });
-  }, [tool, color, lineWidth, canvasRef]);
+  }, [tool, color, lineWidth, canvasRef, setPanning]);
 
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
     if (tool === 'bucket') return;
+
+    // Only process moves from the pointer that started the drawing
+    if (activePointerId.current !== null && e.pointerId !== activePointerId.current) return;
 
     if (tool === 'hand' && isPanning.current && lastPanPoint.current) {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -206,7 +219,7 @@ export function useWhiteboard({
       collectedPoints.current.push(currentPoint);
     }
 
-    drawingService.continueDrawing(canvasRef.current, currentPoint, {
+    drawingService.continueDrawing(canvasRef.current, lastPoint.current, currentPoint, {
       tool: tool === 'magicpen' ? 'pen' : tool, // Draw as pen initially
       color,
       lineWidth,
@@ -236,10 +249,25 @@ export function useWhiteboard({
     }
 
     lastPoint.current = currentPoint;
-  }, [color, lineWidth, tool, canvasRef]);
+  }, [color, lineWidth, tool, canvasRef, setViewConfig]);
 
 
-  const onPointerUp = useCallback((): void => {
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+    // Only handle up events for the active pointer
+    if (activePointerId.current !== null && e.pointerId !== activePointerId.current) return;
+
+    // Release focus from the element
+    if (activePointerId.current !== null && e.currentTarget) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // Capture might have been lost or not supported, fail gracefully
+      }
+    }
+
+    // Reset isolation tracking
+    activePointerId.current = null;
+
     if (tool === 'bucket') return;
 
     if (tool === 'hand') {
@@ -250,17 +278,17 @@ export function useWhiteboard({
 
     if (!isDrawing.current || !canvasRef.current) return;
 
-    // 1. Finalize drawing state IMMEDIATELY
+    // Finalize drawing state 
     isDrawing.current = false;
     lastPoint.current = null;
     drawingService.finishDrawing(canvasRef.current);
 
-    // 2. Flush any pending segments
+    // Flush any pending segments
     if (pendingSegments.current.length > 0) {
       throttledDraw.current();
     }
 
-    // 3. Handle Magic Pen shape detection
+    // Handle Magic Pen shape detection
     if (tool === 'magicpen' && collectedPoints.current.length > 5) {
       const { shapeType, confidence } = detectShape(collectedPoints.current);
 
@@ -316,11 +344,9 @@ export function useWhiteboard({
       }
     }
 
-    // 4. Reset collected points
-    collectedPoints.current = [];
-  }, [canvasRef, tool, color, lineWidth]);
+  }, [canvasRef, tool, color, lineWidth, setPanning]);
 
-  // Reset do quadro
+  // Reset board
   const resetBoard = useCallback((callback?: (error?: string) => void): void => {
     console.log('[useWhiteboard] Resetting board...');
     pendingSegments.current = []; // Clear any pending segments
@@ -340,7 +366,7 @@ export function useWhiteboard({
     });
   }, [canvasRef]);
 
-  // Setup dos event listeners do socket
+  // Setup socket event listeners
   useEffect(() => {
     const handleConnect = (): void => {
       setIsConnected(true);
@@ -364,7 +390,6 @@ export function useWhiteboard({
       }
 
       // Ensure localStrokes stays sorted by timestamp
-      // Most of the time, strokes arrive in order, so we check the last element first
       if (localStrokes.current.length === 0 ||
         (stroke.timestamp || 0) >= (localStrokes.current[localStrokes.current.length - 1].timestamp || 0)) {
         localStrokes.current.push(stroke);
@@ -379,15 +404,9 @@ export function useWhiteboard({
       // Ensure world raster is synced with the FULL list before any partial drawing
       await canvasService.ensureWorldRaster(localStrokes.current);
 
-      // If stroke has a strokeId, redraw just that stroke group for smooth appearance
-      if (stroke.strokeId) {
-        const strokeGroup = localStrokes.current.filter(s => s.strokeId === stroke.strokeId);
-        // Apply just this stroke group (will draw as continuous path)
-        canvasService.applyStrokes(canvasRef.current, strokeGroup, viewConfigRef.current);
-      } else {
-        // Fallback for strokes without strokeId
-        drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
-      }
+      // Draw live segment directly (no full history scan or group redraw)
+      // The background raster will be updated in handleDrawingBatch or on zoom events.
+      drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
     };
 
     const handleDrawingBatch = async (batch: Stroke[]): Promise<void> => {
@@ -472,6 +491,7 @@ export function useWhiteboard({
       console.log('[useWhiteboard] Received clearBoard event');
       if (!canvasRef.current) return;
       canvasService.clearCanvas(canvasRef.current);
+      canvasService.clearWorldRaster();
       localStrokes.current = []; // Clear local strokes
     };
 
@@ -705,10 +725,13 @@ export function useWhiteboard({
       touchStartCenter.current = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
       touchStartView.current = viewConfig;
       setPanning(true);
+
+      // 🚀 Phase 8: Isolation reset
+      activePointerId.current = null;
       isDrawing.current = false; // Cancel any active drawing
       drawingService.finishDrawing(e.currentTarget);
     }
-  }, [viewConfig]);
+  }, [viewConfig, setPanning]);
 
   const onTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 2 && touchStartDist.current && touchStartCenter.current && touchStartView.current) {
@@ -744,6 +767,7 @@ export function useWhiteboard({
     touchStartCenter.current = null;
     touchStartView.current = null;
     setPanning(false);
+    activePointerId.current = null;
   }, [setPanning]);
 
   // Redraw when view config changes - Throttled with rAF
@@ -754,7 +778,7 @@ export function useWhiteboard({
       if (!canvasRef.current) return;
       isRendering.current = true;
 
-      // 🚀 Phase 2: Try to use Offscreen Baking
+      // Try to use Offscreen Baking
       const bakedCanvas = await canvasService.getBakedCanvas(canvasRef.current, localStrokes.current, viewConfig);
 
       if (bakedCanvas) {

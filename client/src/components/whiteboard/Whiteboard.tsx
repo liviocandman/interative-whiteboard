@@ -7,7 +7,7 @@ import type { RoomSettings } from '../../types/room';
 interface WhiteboardProps {
   onPointerDown: (e: React.PointerEvent<HTMLCanvasElement>) => void;
   onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void;
-  onPointerUp: () => void;
+  onPointerUp: (e: React.PointerEvent<HTMLCanvasElement>) => void;
   onWheel?: (e: React.WheelEvent<HTMLCanvasElement>) => void;
   onTouchStart?: (e: React.TouchEvent<HTMLCanvasElement>) => void;
   onTouchMove?: (e: React.TouchEvent<HTMLCanvasElement>) => void;

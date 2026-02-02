@@ -15,10 +15,15 @@ class CanvasService {
   private isBaking = false;
   private currentBakePromise: Promise<void> | null = null;
 
-  // 🚀 Phase 6: World Space Raster Layer
+  private readonly MAX_CANVAS_DIMENSION = 2500;
+  private worldWidth = this.MAX_CANVAS_DIMENSION;
+  private worldHeight = this.MAX_CANVAS_DIMENSION;
   private worldCanvas: HTMLCanvasElement | null = null;
-  private worldWidth = 5000;
-  private worldHeight = 5000;
+
+  constructor() {
+    // Optimization: Unified 1.0 DPI for all devices to ensure perfect alignment
+    console.log(`[CanvasService] Unified Grid Active: ${this.worldWidth}x${this.worldHeight}px buffer`);
+  }
 
   // Convert screen coordinates to world coordinates
   screenToWorld(screen: Point, view: ViewConfig): Point {
@@ -44,18 +49,18 @@ class CanvasService {
       const ctx = this.worldCanvas.getContext('2d', { willReadFrequently: true });
       if (ctx) {
         this.setupCanvasDefaults(ctx);
-        // Position world (0,0) at the center of the world canvas for infinite growth potential
+        // Position world (0,0) at the center of the world canvas
         ctx.translate(this.worldWidth / 2, this.worldHeight / 2);
       }
     }
   }
 
   // Convert "real" world coordinates to worldCanvas pixel coordinates
-  // (Accounting for the center translation)
+  // accounting for centering and the memory-saving worldDpi scale.
   private worldToWorldCanvas(world: Point): Point {
     return {
-      x: world.x + this.worldWidth / 2,
-      y: world.y + this.worldHeight / 2,
+      x: (world.x + this.worldWidth / 2),
+      y: (world.y + this.worldHeight / 2),
     };
   }
 
@@ -240,24 +245,36 @@ class CanvasService {
       this.applyViewTransform(ctx, view, canvas);
     }
 
-    // Performance: We now assume strokes are pre-sorted for chronological rendering.
-    const sortedStrokes = strokes;
-    const processedIds = new Set<string>();
+    // Performance: O(N) pass - Group segments by strokeId to avoid nested filtering
+    const strokeGroups = new Map<string, Stroke[]>();
+    const renderOrder: (string | Stroke)[] = [];
 
-    for (const stroke of sortedStrokes) {
+    for (const stroke of strokes) {
+      if (stroke.strokeId) {
+        if (!strokeGroups.has(stroke.strokeId)) {
+          strokeGroups.set(stroke.strokeId, []);
+          renderOrder.push(stroke.strokeId);
+        }
+        strokeGroups.get(stroke.strokeId)!.push(stroke);
+      } else {
+        renderOrder.push(stroke);
+      }
+    }
+
+    for (const item of renderOrder) {
+      const isId = typeof item === 'string';
+      const firstStroke = isId ? strokeGroups.get(item as string)![0] : (item as Stroke);
+
       // Viewport Culling
-      if (view && !this.isStrokeVisible(stroke, view, canvas.width, canvas.height)) {
+      if (view && !this.isStrokeVisible(firstStroke, view, canvas.width, canvas.height)) {
         continue;
       }
 
-      if (stroke.strokeId && !processedIds.has(stroke.strokeId)) {
-        // Find all other strokes in this group
-        const group = sortedStrokes.filter(s => s.strokeId === stroke.strokeId);
+      if (isId) {
+        const group = strokeGroups.get(item as string)!;
         await this.drawStrokeGroup(canvas, group, view);
-        processedIds.add(stroke.strokeId);
-      } else if (!stroke.strokeId) {
-        // Ungrouped individual stroke
-        await this.drawStroke(canvas, stroke, view);
+      } else {
+        await this.drawStroke(canvas, item as Stroke, view);
       }
     }
 
@@ -345,7 +362,7 @@ class CanvasService {
     ctx.beginPath();
     ctx.moveTo(firstStroke.from.x, firstStroke.from.y);
 
-    strokes.slice(1).forEach(stroke => {
+    strokes.forEach(stroke => {
       ctx.lineTo(stroke.to.x, stroke.to.y);
     });
 
@@ -455,7 +472,7 @@ class CanvasService {
       ctx.save();
       this.applyViewTransform(ctx, activeView, canvas);
 
-      // worldCanvas is centered at (0,0) in world space
+      // Draw worldCanvas 1:1
       ctx.drawImage(
         this.worldCanvas,
         -this.worldWidth / 2,
@@ -474,7 +491,11 @@ class CanvasService {
 
     ctx.save();
     ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.lineWidth;
+
+    // Since we are 1:1, we only add a tiny padding to ensure
+    // airtight anti-aliasing joints for the flood fill worker.
+    ctx.lineWidth = stroke.lineWidth + 0.5;
+
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';

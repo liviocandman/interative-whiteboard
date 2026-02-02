@@ -111,13 +111,29 @@ export class WhiteboardServer {
   async start(port: number = 3001): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        const { networkInterfaces } = require('os');
+        const nets = networkInterfaces();
+        const results: string[] = [];
+
+        for (const name of Object.keys(nets)) {
+          for (const net of nets[name]) {
+            // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+            if (net.family === 'IPv4' && !net.internal) {
+              results.push(net.address);
+            }
+          }
+        }
+
         this.server.listen(port, () => {
+          const localIp = results.length > 0 ? results[0] : 'localhost';
+
           console.log('');
           console.log('╔════════════════════════════════════════╗');
           console.log('║   🎨 Collaborative Whiteboard Server  ║');
           console.log('╠════════════════════════════════════════╣');
-          console.log(`║   📡 Server: http://localhost:${port}     ║`);
-          console.log(`║   🔌 WebSocket: ws://localhost:${port}    ║`);
+          console.log(`║   📡 Local: http://localhost:${port}      ║`);
+          console.log(`║   🌐 Network: http://${localIp}:${port}   ║`);
+          console.log(`║   🔌 WebSocket: ws://${localIp}:${port}   ║`);
           console.log('║   ✅ Status: Running                   ║');
           console.log('╚════════════════════════════════════════╝');
           console.log('');

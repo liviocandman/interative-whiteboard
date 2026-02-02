@@ -106,9 +106,9 @@ describe('validateColor', () => {
     expect(validateColor('#abc')).toBe(true);
   });
 
-  it('rejects RGB format', () => {
-    expect(validateColor('rgb(255, 0, 0)')).toBe(false);
-    expect(validateColor('rgba(255, 0, 0, 1)')).toBe(false);
+  it('accepts RGB and RGBA formats', () => {
+    expect(validateColor('rgb(255, 0, 0)')).toBe(true);
+    expect(validateColor('rgba(255, 0, 0, 1)')).toBe(true);
   });
 
   it('rejects invalid hex', () => {

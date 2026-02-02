@@ -36,6 +36,10 @@ export function setupSocketRoutes(io: Server): void {
       drawingController.handleDrawing(socket, stroke);
     });
 
+    socket.on('drawing_batch', (batch: any[]) => {
+      drawingController.handleDrawingBatch(socket, batch);
+    });
+
     socket.on('saveState', (snapshot: string, callback?: (error?: string) => void) => {
       drawingController.handleSaveState(socket, snapshot, callback);
     });

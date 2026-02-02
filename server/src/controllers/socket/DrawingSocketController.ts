@@ -12,6 +12,41 @@ export class DrawingSocketController {
     this.stateService = new StateService();
   }
 
+  async handleDrawingBatch(socket: Socket, batch: any[]): Promise<void> {
+    try {
+      const validatedBatch = StrokeModel.validateBatch(batch);
+      if (!validatedBatch) {
+        console.warn(`[DrawingController] Invalid batch from ${socket.id}`);
+        socket.emit('error', {
+          event: 'drawing_batch',
+          message: 'Invalid batch data',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      const currentRoom = this.getCurrentRoom(socket);
+      if (!currentRoom) {
+        console.warn(`[DrawingController] Socket ${socket.id} not in a room`);
+        return;
+      }
+
+      // Add user ID to all strokes in batch
+      const batchWithUser = validatedBatch.map(s => StrokeModel.addUserId(s, socket.id));
+
+      // Save and broadcast batch
+      await this.drawingService.handleBatch(currentRoom, batchWithUser, socket.id);
+
+    } catch (error) {
+      console.error('[DrawingController] Error handling drawing batch:', error);
+      socket.emit('error', {
+        event: 'drawing_batch',
+        message: 'Internal server error',
+        timestamp: Date.now(),
+      });
+    }
+  }
+
   async handleDrawing(socket: Socket, stroke: any): Promise<void> {
     try {
       const validatedStroke = StrokeModel.validate(stroke);
@@ -39,12 +74,8 @@ export class DrawingSocketController {
       // Add user ID to stroke
       const strokeWithUser = StrokeModel.addUserId(validatedStroke, socket.id);
 
-      console.log(`[DrawingController] Processing stroke in room ${currentRoom} from ${socket.id}`);
-
-      // Save and broadcast
+      // Save and broadcast as single-item batch for consistency
       await this.drawingService.handleStroke(currentRoom, strokeWithUser, socket.id);
-
-      console.log(`[DrawingController] Stroke saved and broadcasted to room ${currentRoom}`);
     } catch (error) {
       console.error('[DrawingController] Error handling drawing:', error);
       socket.emit('error', {

@@ -5,7 +5,6 @@ let worker: Worker | null = null;
 function getWorker(): Worker {
   if (!worker) {
     // Vite-specific worker instantiation
-    // @ts-ignore - Vite worker import
     worker = new Worker(new URL('../workers/fill.worker.ts', import.meta.url), {
       type: 'module'
     });

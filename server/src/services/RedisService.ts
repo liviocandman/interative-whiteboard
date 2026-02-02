@@ -92,9 +92,9 @@ export class RedisService {
   }
 
   // List operations
-  async rPush(key: string, value: string): Promise<number> {
+  async rPush(key: string, ...values: string[]): Promise<number> {
     this.ensureConnected();
-    return await this.pubClient.rPush(key, value);
+    return await this.pubClient.rPush(key, values);
   }
 
   async lRange(key: string, start: number, end: number): Promise<string[]> {

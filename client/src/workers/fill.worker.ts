@@ -31,7 +31,8 @@ self.onmessage = (e: MessageEvent<FillMessage>) => {
   stackBasedFloodFill(buffer, width, height, startX, startY, targetColor, replacementColor, tolerance);
 
   // Send back the modified buffer and taskId as a transferable object
-  self.postMessage({ taskId, buffer }, [buffer.buffer] as any);
+  // @ts-expect-error - postMessage signature issues in workers
+  self.postMessage({ taskId, buffer }, [buffer.buffer]);
 };
 
 function stackBasedFloodFill(

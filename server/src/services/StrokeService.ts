@@ -15,22 +15,21 @@ export class StrokeService {
     this.redis = RedisService.getInstance();
   }
 
-  async saveAndBroadcast(
+  async saveAndBroadcastBatch(
     roomId: string,
-    stroke: Stroke,
+    strokes: Stroke[],
     origin?: string
   ): Promise<BroadcastResult> {
     const strokesKey = REDIS_KEYS.ROOM_STROKES(roomId);
     const channel = REDIS_KEYS.ROOM_CHANNEL(roomId);
 
-    // Save stroke
-    const serialized = StrokeModel.serialize(stroke);
-    const savedCount = await this.redis.rPush(strokesKey, serialized);
+    // Save strokes (store batch as a single entry for undo optimization)
+    const savedCount = await this.redis.rPush(strokesKey, JSON.stringify(strokes));
 
-    // Publish to other clients
+    // Publish batch to other clients
     const publishCount = await this.redis.publish(
       channel,
-      JSON.stringify({ stroke, origin: origin || null })
+      JSON.stringify({ strokes, origin: origin || null })
     );
 
     return { savedCount, publishCount };
@@ -40,9 +39,21 @@ export class StrokeService {
     const strokesKey = REDIS_KEYS.ROOM_STROKES(roomId);
     const items = await this.redis.lRange(strokesKey, 0, -1);
 
-    return items
-      .map(item => StrokeModel.deserialize(item))
-      .filter((stroke): stroke is Stroke => stroke !== null);
+    const strokes: Stroke[] = [];
+    for (const item of items) {
+      try {
+        const parsed = JSON.parse(item);
+        if (Array.isArray(parsed)) {
+          strokes.push(...parsed);
+        } else {
+          const validated = StrokeModel.validate(parsed);
+          if (validated) strokes.push(validated);
+        }
+      } catch (e) {
+        console.error('[StrokeService] Error deserializing stroke:', e);
+      }
+    }
+    return strokes;
   }
 
   async clearStrokes(roomId: string): Promise<number> {
@@ -68,35 +79,44 @@ export class StrokeService {
     const strokesKey = REDIS_KEYS.ROOM_STROKES(roomId);
     const items = await this.redis.lRange(strokesKey, 0, -1);
 
-    const strokes = items
-      .map(item => StrokeModel.deserialize(item))
-      .filter((stroke): stroke is Stroke => stroke !== null);
+    const removedStrokes: Stroke[] = [];
+    const remainingItems: string[] = [];
 
-    // Find strokes to remove
-    const strokesToRemove = strokes.filter(
-      s => s.strokeId === strokeId && s.userId === userId
-    );
+    for (const item of items) {
+      try {
+        const parsed = JSON.parse(item);
+        if (Array.isArray(parsed)) {
+          // If any stroke in the batch matches, we might need to partially remove
+          // or just filter the whole batch. Since segments of one batch share metadata,
+          // usually the WHOLE batch belongs to the same strokeId/userId.
+          const isMatch = parsed.some(s => s.strokeId === strokeId && s.userId === userId);
 
-    if (strokesToRemove.length === 0) {
-      return [];
-    }
-
-    // Filter out the strokes to remove
-    const remainingStrokes = strokes.filter(
-      s => !(s.strokeId === strokeId && s.userId === userId)
-    );
-
-    // Atomic replace: delete and re-add remaining strokes
-    await this.redis.del(strokesKey);
-
-    if (remainingStrokes.length > 0) {
-      const serialized = remainingStrokes.map(s => StrokeModel.serialize(s));
-      for (const stroke of serialized) {
-        await this.redis.rPush(strokesKey, stroke);
+          if (isMatch) {
+            removedStrokes.push(...parsed);
+          } else {
+            remainingItems.push(item);
+          }
+        } else {
+          const s = StrokeModel.validate(parsed);
+          if (s && s.strokeId === strokeId && s.userId === userId) {
+            removedStrokes.push(s);
+          } else {
+            remainingItems.push(item);
+          }
+        }
+      } catch {
+        remainingItems.push(item);
       }
     }
 
-    return strokesToRemove;
+    if (removedStrokes.length > 0) {
+      await this.redis.del(strokesKey);
+      if (remainingItems.length > 0) {
+        await this.redis.rPush(strokesKey, ...remainingItems);
+      }
+    }
+
+    return removedStrokes;
   }
 
   /**

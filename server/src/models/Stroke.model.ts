@@ -63,6 +63,16 @@ export class StrokeModel {
     };
   }
 
+  static validateBatch(batch: any): Stroke[] | null {
+    if (!Array.isArray(batch)) return null;
+    const validated: Stroke[] = [];
+    for (const item of batch) {
+      const v = this.validate(item);
+      if (v) validated.push(v);
+    }
+    return validated.length > 0 ? validated : null;
+  }
+
   static isValidPoint(point: any): point is Point {
     return (
       point &&

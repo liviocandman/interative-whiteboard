@@ -47,16 +47,29 @@ export class DrawingService {
     // Ensure stroke has userId
     stroke.userId = userId;
 
-    // Save stroke to Redis
-    await this.strokeService.saveAndBroadcast(roomId, stroke, userId);
-
-    // NOTE: Broadcast is handled in socket handler using socket.to(roomId) 
-    // to exclude the sender and avoid duplicate strokes
+    // Save stroke to Redis as a single-item batch
+    await this.strokeService.saveAndBroadcastBatch(roomId, [stroke], userId);
 
     // Clear undo stack for this user when they draw something new
     this.clearUndoStack(roomId, userId);
 
     console.log(`[DrawingService] Stroke saved for room ${roomId} by user ${userId}`);
+  }
+
+  /**
+   * Handle a batch of strokes from a user
+   */
+  async handleBatch(roomId: string, strokes: Stroke[], userId: string): Promise<void> {
+    // Ensure all strokes have userId
+    strokes.forEach(s => s.userId = userId);
+
+    // Save batch to Redis and broadcast
+    await this.strokeService.saveAndBroadcastBatch(roomId, strokes, userId);
+
+    // Clear undo stack for this user when they draw something new
+    this.clearUndoStack(roomId, userId);
+
+    console.log(`[DrawingService] Batch of ${strokes.length} strokes saved for room ${roomId} by user ${userId}`);
   }
 
   /**
@@ -169,13 +182,16 @@ export class DrawingService {
   /**
    * Rebuild strokes in Redis (used after undo)
    */
+  /**
+   * Rebuild strokes in Redis (used after undo)
+   */
   private async rebuildStrokes(roomId: string, strokes: Stroke[]): Promise<void> {
     // Clear existing strokes
     await this.strokeService.clearStrokes(roomId);
 
     // Re-add all strokes
     for (const stroke of strokes) {
-      await this.strokeService.saveAndBroadcast(roomId, stroke, stroke.userId || 'unknown');
+      await this.strokeService.saveAndBroadcastBatch(roomId, [stroke], stroke.userId || 'unknown');
     }
   }
 

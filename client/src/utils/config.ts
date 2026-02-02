@@ -21,7 +21,9 @@ export function getBackendUrl(): string {
       try {
         const url = new URL(envUrl);
         port = url.port || port;
-      } catch { }
+      } catch {
+        // ignore
+      }
     }
     return `${window.location.protocol}//${currentHost}:${port}`;
   }

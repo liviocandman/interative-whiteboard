@@ -295,7 +295,7 @@ describe('detectShape', () => {
       { x: 20, y: 20 }
     ];
 
-    expect(detectShape(fewPoints)).toBe('unknown');
+    expect(detectShape(fewPoints).shapeType).toBe('unknown');
   });
 
   it('returns unknown for very small drawings', () => {
@@ -304,7 +304,7 @@ describe('detectShape', () => {
       tiny.push({ x: 5 + Math.random() * 5, y: 5 + Math.random() * 5 });
     }
 
-    expect(detectShape(tiny)).toBe('unknown');
+    expect(detectShape(tiny).shapeType).toBe('unknown');
   });
 
   it('detects circle from curved points', () => {
@@ -312,21 +312,21 @@ describe('detectShape', () => {
     const result = detectShape(circle);
 
     // Algorithm may classify perfect circles as squares due to high area ratio
-    expect(['circle', 'square']).toContain(result);
+    expect(['circle', 'square']).toContain(result.shapeType);
   });
 
   it('detects square from square-like points', () => {
     const square = generateRectangle(0, 0, 100, 100);
     const result = detectShape(square);
 
-    expect(result).toBe('square');
+    expect(result.shapeType).toBe('square');
   });
 
   it('detects rectangle from elongated points', () => {
     const rectangle = generateRectangle(0, 0, 200, 80);
     const result = detectShape(rectangle);
 
-    expect(result).toBe('rectangle');
+    expect(result.shapeType).toBe('rectangle');
   });
 
   it('detects triangle from triangular points', () => {
@@ -349,6 +349,6 @@ describe('detectShape', () => {
     const result = detectShape(triangle);
 
     // Algorithm uses complex heuristics - accept any valid shape detection
-    expect(['triangle', 'circle', 'square', 'rectangle', 'unknown']).toContain(result);
+    expect(['triangle', 'circle', 'square', 'rectangle', 'unknown']).toContain(result.shapeType);
   });
 });

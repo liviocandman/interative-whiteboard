@@ -7,6 +7,7 @@ const ROOM_PATTERN = 'room:*';
 interface PubSubMessage {
   reset?: boolean;
   stroke?: Stroke;
+  strokes?: Stroke[];
   origin?: string;
 }
 
@@ -43,11 +44,17 @@ function handlePubSubMessage(io: Server, message: string, channel: string): void
     }
 
     if (data.stroke) {
-      // Broadcast stroke to all clients except origin
+      // Broadcast single stroke (backward compatibility)
       const target = data.origin ? io.in(roomId).except(data.origin) : io.in(roomId);
       target.emit('drawing', data.stroke);
-
       console.debug(`[PubSub] Broadcasted stroke to room ${roomId}`);
+    }
+
+    if (data.strokes) {
+      // Broadcast batch to all clients except origin
+      const target = data.origin ? io.in(roomId).except(data.origin) : io.in(roomId);
+      target.emit('drawing_batch', data.strokes);
+      console.debug(`[PubSub] Broadcasted batch of ${data.strokes.length} to room ${roomId}`);
     }
 
   } catch (error) {

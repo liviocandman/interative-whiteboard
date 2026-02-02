@@ -15,6 +15,11 @@ class CanvasService {
   private isBaking = false;
   private currentBakePromise: Promise<void> | null = null;
 
+  // 🚀 Phase 6: World Space Raster Layer
+  private worldCanvas: HTMLCanvasElement | null = null;
+  private worldWidth = 5000;
+  private worldHeight = 5000;
+
   // Convert screen coordinates to world coordinates
   screenToWorld(screen: Point, view: ViewConfig): Point {
     return {
@@ -28,6 +33,29 @@ class CanvasService {
     return {
       x: world.x * view.zoom + view.offset.x,
       y: world.y * view.zoom + view.offset.y,
+    };
+  }
+
+  private initWorldCanvas(): void {
+    if (!this.worldCanvas) {
+      this.worldCanvas = document.createElement('canvas');
+      this.worldCanvas.width = this.worldWidth;
+      this.worldCanvas.height = this.worldHeight;
+      const ctx = this.worldCanvas.getContext('2d', { willReadFrequently: true });
+      if (ctx) {
+        this.setupCanvasDefaults(ctx);
+        // Position world (0,0) at the center of the world canvas for infinite growth potential
+        ctx.translate(this.worldWidth / 2, this.worldHeight / 2);
+      }
+    }
+  }
+
+  // Convert "real" world coordinates to worldCanvas pixel coordinates
+  // (Accounting for the center translation)
+  private worldToWorldCanvas(world: Point): Point {
+    return {
+      x: world.x + this.worldWidth / 2,
+      y: world.y + this.worldHeight / 2,
     };
   }
 
@@ -176,6 +204,7 @@ class CanvasService {
     if (!ctx) return;
 
     this.clearCanvas(canvas);
+    this.clearWorldRaster();
 
     // Restaura snapshot se existir
     if (state.snapshot) {
@@ -273,6 +302,7 @@ class CanvasService {
       const ctx = this.offscreenCanvas.getContext('2d');
       if (ctx) {
         this.clearCanvas(this.offscreenCanvas);
+        await this.ensureWorldRaster(strokes);
         await this.applyStrokes(this.offscreenCanvas, strokes, view);
         this.offscreenView = { ...view };
       }
@@ -284,7 +314,7 @@ class CanvasService {
   }
 
   // Draw a group of strokes with the same strokeId as a single continuous path
-  private async drawStrokeGroup(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): Promise<void> {
+  async drawStrokeGroup(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): Promise<void> {
     if (strokes.length === 0) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -293,10 +323,7 @@ class CanvasService {
 
     // Handle bucket tool
     if (firstStroke.tool === 'bucket') {
-      // Bucket fill needs raw pixel coordinates for imageData
-      const activeView = view || this.offscreenView || DEFAULT_VIEW;
-      const fillPoint = this.getPixelPoint(firstStroke.from, activeView, canvas);
-      await floodFill(canvas, fillPoint, firstStroke.color);
+      await this.applyBucketFill(canvas, firstStroke, view);
       return;
     }
 
@@ -326,15 +353,13 @@ class CanvasService {
     ctx.restore();
   }
 
-  private async drawStroke(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): Promise<void> {
+  async drawStroke(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): Promise<void> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     // Handle bucket tool
     if (stroke.tool === 'bucket') {
-      const activeView = view || this.offscreenView || DEFAULT_VIEW;
-      const fillPoint = this.getPixelPoint(stroke.from, activeView, canvas);
-      await floodFill(canvas, fillPoint, stroke.color);
+      await this.applyBucketFill(canvas, stroke, view);
       return;
     }
 
@@ -383,6 +408,102 @@ class CanvasService {
       this.setupCanvasDefaults(ctx);
     }
     return ctx;
+  }
+
+  private lastRasterizedIndex = -1;
+
+  async ensureWorldRaster(strokes: Stroke[]): Promise<void> {
+    this.initWorldCanvas();
+    if (!this.worldCanvas) return;
+
+    // If strokes were removed (undo), we need full rebake
+    if (strokes.length <= this.lastRasterizedIndex) {
+      this.clearWorldRaster();
+    }
+
+    // Sync missing strokes
+    for (let i = this.lastRasterizedIndex + 1; i < strokes.length; i++) {
+      const stroke = strokes[i];
+      if (stroke.tool === 'bucket') {
+        const fillPoint = this.worldToWorldCanvas(stroke.from);
+        await floodFill(this.worldCanvas, fillPoint, stroke.color);
+      } else {
+        this.syncStrokeToWorld(stroke);
+      }
+      this.lastRasterizedIndex = i;
+    }
+  }
+
+  private async applyBucketFill(canvas: HTMLCanvasElement, stroke: Stroke, view?: ViewConfig): Promise<void> {
+    this.initWorldCanvas();
+    if (!this.worldCanvas) return;
+
+    const activeView = view || this.offscreenView || DEFAULT_VIEW;
+
+    // 1. Ensure worldCanvas is up to date with vector boundaries
+    // Note: In an ideal world, we'd only pass strokes up to this one,
+    // but applyStrokes is already iterative. For now, we assume the world 
+    // is synced by the caller or we'll sync it here if needed.
+    // However, since we don't have the full list here, this is tricky.
+    // WORKAROUND: For now, we perform the fill on the world canvas.
+    const fillPoint = this.worldToWorldCanvas(stroke.from);
+    await floodFill(this.worldCanvas, fillPoint, stroke.color);
+
+    // 2. Draw the worldCanvas result onto the current canvas with the appropriate transform
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.save();
+      this.applyViewTransform(ctx, activeView, canvas);
+
+      // worldCanvas is centered at (0,0) in world space
+      ctx.drawImage(
+        this.worldCanvas,
+        -this.worldWidth / 2,
+        -this.worldHeight / 2
+      );
+
+      ctx.restore();
+    }
+  }
+
+  // Helper to sync a stroke to the world raster (for future boundary collision)
+  syncStrokeToWorld(stroke: Stroke): void {
+    this.initWorldCanvas();
+    const ctx = this.worldCanvas?.getContext('2d');
+    if (!ctx || !this.worldCanvas) return;
+
+    ctx.save();
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
+
+    if (stroke.points && stroke.points.length > 0) {
+      ctx.beginPath();
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      }
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(stroke.from.x, stroke.from.y);
+      ctx.lineTo(stroke.to.x, stroke.to.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  clearWorldRaster(): void {
+    if (!this.worldCanvas) return;
+    this.clearCanvas(this.worldCanvas);
+    const ctx = this.worldCanvas.getContext('2d');
+    if (ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.translate(this.worldWidth / 2, this.worldHeight / 2);
+    }
+    this.lastRasterizedIndex = -1;
   }
 }
 

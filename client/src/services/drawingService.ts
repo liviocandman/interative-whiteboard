@@ -1,6 +1,5 @@
 import { canvasService } from './canvasService';
-import { floodFill } from './fillService';
-import { DEFAULT_VIEW, type Tool, type Point, type Stroke, type ViewConfig } from '../types';
+import type { Tool, Point, Stroke, ViewConfig } from '../types';
 
 interface DrawingOptions {
   tool: Tool;
@@ -63,10 +62,9 @@ class DrawingService {
     const ctx = canvasService.getContext(canvas);
     if (!ctx) return;
 
-    // Handle bucket fill strokes - use current view for world->pixel mapping
+    // Handle bucket fill strokes - use world space raster layer
     if (stroke.tool === 'bucket') {
-      const fillPoint = canvasService.getPixelPoint(stroke.from, view || DEFAULT_VIEW, canvas);
-      await floodFill(canvas, fillPoint, stroke.color); // Properly await the worker
+      await canvasService.drawStroke(canvas, stroke, view);
       return;
     }
 
@@ -121,14 +119,17 @@ class DrawingService {
   private async handleBucketFill(canvas: HTMLCanvasElement, point: Point, fillColor: string, view: ViewConfig): Promise<void> {
     // Prevent multiple simultaneous flood fills
     if (this.isFloodFilling) return;
-
     this.isFloodFilling = true;
 
-    // Get actual pixel coordinates for the world point under current view
-    const pixelPoint = canvasService.getPixelPoint(point, view, canvas);
-
     try {
-      await floodFill(canvas, pixelPoint, fillColor);
+      const stroke: Stroke = {
+        from: point,
+        to: point,
+        color: fillColor,
+        lineWidth: 1,
+        tool: 'bucket',
+      };
+      await canvasService.drawStroke(canvas, stroke, view);
     } catch (error) {
       console.error('[DrawingService] Flood fill failed:', error);
     } finally {

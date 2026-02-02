@@ -94,10 +94,8 @@ export function useWhiteboard({
       const segments = [...pendingSegments.current];
       pendingSegments.current = [];
 
-      // Emit each segment to the server
-      segments.forEach(stroke => {
-        socket.emit('drawing', stroke);
-      });
+      // Emit batch to server
+      socket.emit('drawing_batch', segments);
     }, 16) // ~60fps
   );
 
@@ -137,6 +135,10 @@ export function useWhiteboard({
 
       // Calculate Bounding Box
       stroke.boundingBox = canvasService.calculateBoundingBox(stroke);
+
+      // 🛡️ Phase 6 Fix: Ensure world raster is synced with existing strokes 
+      // BEFORE performing the fill, otherwise it will leak through missing lines.
+      await canvasService.ensureWorldRaster(localStrokes.current);
 
       await drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
       socket.emit('drawing', stroke); // Emit directly, bucket is single-shot
@@ -331,6 +333,7 @@ export function useWhiteboard({
         console.log('[useWhiteboard] Board reset successfully');
         if (canvasRef.current) {
           canvasService.clearCanvas(canvasRef.current);
+          canvasService.clearWorldRaster();
         }
       }
       callback?.(error);
@@ -349,7 +352,7 @@ export function useWhiteboard({
       setIsConnected(false);
     };
 
-    const handleDrawing = (stroke: Stroke): void => {
+    const handleDrawing = async (stroke: Stroke): Promise<void> => {
       if (!canvasRef.current) return;
 
       // Prevent adding our own strokes back into localStrokes if we are the sender
@@ -373,6 +376,8 @@ export function useWhiteboard({
         }
         localStrokes.current.splice(i + 1, 0, stroke);
       }
+      // Ensure world raster is synced with the FULL list before any partial drawing
+      await canvasService.ensureWorldRaster(localStrokes.current);
 
       // If stroke has a strokeId, redraw just that stroke group for smooth appearance
       if (stroke.strokeId) {
@@ -383,6 +388,38 @@ export function useWhiteboard({
         // Fallback for strokes without strokeId
         drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
       }
+    };
+
+    const handleDrawingBatch = async (batch: Stroke[]): Promise<void> => {
+      if (!canvasRef.current || batch.length === 0) return;
+
+      // Filter out our own strokes (optimistic UI already handles them)
+      const remoteBatch = batch.filter(s => s.userId !== socket.id);
+      if (remoteBatch.length === 0) return;
+
+      remoteBatch.forEach(stroke => {
+        if (!stroke.boundingBox) {
+          stroke.boundingBox = canvasService.calculateBoundingBox(stroke);
+        }
+
+        // Maintain sorted order
+        if (localStrokes.current.length === 0 ||
+          (stroke.timestamp || 0) >= (localStrokes.current[localStrokes.current.length - 1].timestamp || 0)) {
+          localStrokes.current.push(stroke);
+        } else {
+          let i = localStrokes.current.length - 1;
+          while (i >= 0 && (localStrokes.current[i].timestamp || 0) > (stroke.timestamp || 0)) {
+            i--;
+          }
+          localStrokes.current.splice(i + 1, 0, stroke);
+        }
+      });
+
+      // Sync world raster ONCE for the whole batch
+      await canvasService.ensureWorldRaster(localStrokes.current);
+
+      // Apply the remote batch to the canvas
+      canvasService.applyStrokes(canvasRef.current, remoteBatch, viewConfigRef.current);
     };
 
     const handleInitialState = (state: CanvasState): void => {
@@ -400,7 +437,7 @@ export function useWhiteboard({
       canvasService.restoreCanvasState(canvasRef.current, { ...state, strokes: sortedStrokes }, viewConfigRef.current);
     };
 
-    const handleStrokeRemoved = (data: { strokeId: string; userId: string }): void => {
+    const handleStrokeRemoved = async (data: { strokeId: string; userId: string }): Promise<void> => {
       if (!canvasRef.current) return;
       console.log('[useWhiteboard] Received strokeRemoved event:', data.strokeId);
 
@@ -410,11 +447,12 @@ export function useWhiteboard({
       );
 
       // Redraw canvas from local strokes (much faster than fetching from server)
+      await canvasService.ensureWorldRaster(localStrokes.current);
       canvasService.redrawFromStrokes(canvasRef.current, localStrokes.current, viewConfigRef.current);
       console.log('[useWhiteboard] Canvas redrawn after stroke removal');
     };
 
-    const handleStrokeAdded = (data: { strokes: Stroke[]; strokeId: string; userId: string }): void => {
+    const handleStrokeAdded = async (data: { strokes: Stroke[]; strokeId: string; userId: string }): Promise<void> => {
       if (!canvasRef.current) return;
       console.log('[useWhiteboard] Received strokeAdded event:', data.strokeId, 'with', data.strokes.length, 'strokes');
 
@@ -425,6 +463,7 @@ export function useWhiteboard({
       localStrokes.current.push(...data.strokes);
 
       // Apply each stroke to canvas
+      await canvasService.ensureWorldRaster(localStrokes.current);
       canvasService.applyStrokes(canvasRef.current, data.strokes, viewConfigRef.current);
       console.log('[useWhiteboard] Strokes applied after redo');
     };
@@ -444,6 +483,7 @@ export function useWhiteboard({
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('drawing', handleDrawing);
+    socket.on('drawing_batch', handleDrawingBatch);
     socket.on('initialState', handleInitialState);
     socket.on('strokeRemoved', handleStrokeRemoved);
     socket.on('strokeAdded', handleStrokeAdded);
@@ -710,8 +750,7 @@ export function useWhiteboard({
   useEffect(() => {
     if (!canvasRef.current || isRendering.current) return;
 
-    let rafId: number;
-    const render = async () => {
+    const render = async (): Promise<void> => {
       if (!canvasRef.current) return;
       isRendering.current = true;
 
@@ -733,7 +772,8 @@ export function useWhiteboard({
       isRendering.current = false;
     };
 
-    rafId = requestAnimationFrame(render);
+    const rafId = requestAnimationFrame(render);
+
     return () => cancelAnimationFrame(rafId);
   }, [canvasRef, viewConfig]);
 

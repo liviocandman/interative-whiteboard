@@ -5,7 +5,7 @@
   gap: 0.75rem;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .top-bar__left {
     gap: 1.5rem;
   }
@@ -21,19 +21,36 @@
 }
 
 .logo-icon {
-  width: 2rem;
-  height: 2rem;
-  background-color: #000;
-  color: #fff;
-  border-radius: 0.5rem;
+  height: 1.75rem;
+  width: auto;
   display: flex;
   align-items: center;
-  justify-content: center;
 }
 
-.logo-icon svg {
-  width: 1.25rem;
-  height: 1.25rem;
+@media (min-width: 610px) {
+  .logo-icon {
+    height: 2.5rem;
+  }
+}
+
+.logo-icon img {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+}
+
+.logo-full {
+  display: none;
+}
+
+@media (min-width: 610px) {
+  .logo-full {
+    display: block;
+  }
+
+  .logo-mobile {
+    display: none;
+  }
 }
 
 .logo-text {
@@ -53,13 +70,13 @@
 .room-info {
   display: flex;
   flex-direction: column;
-  padding-left: 0.75rem;
+  padding-left: 0.5rem;
   border-left: 1px solid var(--border-subtle);
-  height: 2rem;
+  height: 1.5rem;
   justify-content: center;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .room-info {
     padding-left: 1.5rem;
     height: 60px;
@@ -160,7 +177,7 @@
   gap: 0.5rem;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .top-bar__right {
     gap: 1rem;
   }

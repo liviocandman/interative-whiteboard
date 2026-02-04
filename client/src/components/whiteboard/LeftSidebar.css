@@ -232,7 +232,7 @@
 }
 
 /* Tablet & Desktop */
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .tool-divider {
     height: 1px;
     width: 100%;
@@ -240,12 +240,14 @@
   }
 }
 
-/* Mobile Overrides (< 420px) */
-@media (max-width: 420px) {
+@media (max-width: 610px),
+(max-height: 620px),
+(orientation: landscape) and (max-height: 620px) {
   .floating-sidebar {
     position: fixed !important;
     left: 1rem !important;
     right: auto !important;
+    top: auto !important;
     bottom: 1rem !important;
     transform: none !important;
     background: transparent !important;
@@ -255,13 +257,26 @@
     z-index: 10000 !important;
     width: auto !important;
     height: auto !important;
+    max-height: calc(100dvh - 2rem) !important;
     display: flex !important;
     flex-direction: column-reverse !important;
     overflow: visible !important;
-    pointer-events: none !important;
-    /* Allow clicks to pass through transparent box */
+    pointer-events: auto !important;
   }
+}
 
+@media (max-width: 610px),
+(max-height: 620px) {
+  @media (min-width: 960px) {
+    .floating-sidebar {
+      left: 1.5rem !important;
+    }
+  }
+}
+
+/* Base styles for the extended mode content */
+@media (max-width: 610px),
+(max-height: 620px) {
   .menu-toggle-btn {
     display: flex;
     pointer-events: auto !important;
@@ -278,44 +293,66 @@
     margin-bottom: 0.5rem;
     box-shadow: var(--shadow-lg);
     z-index: 10001;
-    pointer-events: auto !important;
-    animation: slideUpFade 0.2s ease-out both;
+    animation: fadeIn 0.2s ease-out;
+
+    /* Ensure content inside doesn't resize/shrink */
+    overflow-y: visible;
+    width: 56px;
+    min-width: 56px;
+    align-items: center;
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch;
   }
 
+  /* Unified scrolling logic for any mobile/short viewport */
   .floating-sidebar.menu-expanded .sidebar-content {
     display: flex;
+    max-height: calc(100dvh - 140px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin;
+    padding-right: 0.25rem;
+    overscroll-behavior-y: contain;
+    /* Remove transform: translateZ(0) to allow fixed-pos children to break out of overflow clipping */
   }
 
-  .stroke-width-popover {
-    bottom: 0 !important;
-    top: auto !important;
-    left: 100% !important;
-    right: auto !important;
-    transform: none !important;
-    margin-left: 12px !important;
-    margin-right: 0 !important;
-    margin-bottom: 0 !important;
-    z-index: 10002 !important;
-    pointer-events: auto !important;
+  .sidebar-content * {
+    flex-shrink: 0 !important;
+    touch-action: pan-y !important;
   }
 
-  .stroke-width-popover input {
-    pointer-events: auto !important;
+  .sidebar-content::-webkit-scrollbar {
+    width: 4px;
+    display: block;
   }
 
+  .sidebar-content::-webkit-scrollbar-thumb {
+    background: var(--border-subtle);
+    border-radius: 4px;
+  }
+
+  /* Refined optimization for very short landscape screens */
+  @media (max-height: 480px) {
+    .floating-sidebar.menu-expanded .sidebar-content {
+      max-height: calc(100dvh - 100px) !important;
+    }
+  }
+
+  .stroke-width-popover,
   .color-picker-popover {
-    bottom: 0 !important;
+    position: fixed !important;
+    bottom: 1rem !important;
+    left: calc(1rem + 68px) !important;
     top: auto !important;
-    left: 100% !important;
     right: auto !important;
     transform: none !important;
-    margin-left: 12px !important;
-    margin-right: 0 !important;
-    margin-bottom: 0 !important;
+    margin: 0 !important;
     z-index: 10002 !important;
     pointer-events: auto !important;
+    animation: fadeIn 0.2s ease-out;
   }
 
+  .stroke-width-popover input,
   .color-picker-popover input {
     pointer-events: auto !important;
   }

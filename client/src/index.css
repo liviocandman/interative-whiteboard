@@ -110,7 +110,7 @@ body {
   line-height: 1.2;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .text-h1 {
     font-size: 3rem;
   }
@@ -267,10 +267,17 @@ body {
   background-color: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-subtle);
-  height: 64px;
+  height: 56px;
   display: flex;
   align-items: center;
-  padding: 0 1.5rem;
+  padding: 0 1rem;
+}
+
+@media (min-width: 960px) {
+  .navbar {
+    height: 64px;
+    padding: 0 1.5rem;
+  }
 }
 
 .navbar-content {
@@ -280,6 +287,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
 }
 
 .logo-container {
@@ -289,14 +297,36 @@ body {
 }
 
 .logo-icon {
-  width: 32px;
-  height: 32px;
-  background-color: #000;
-  color: #fff;
-  border-radius: 8px;
+  height: 24px;
+  width: auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+}
+
+@media (min-width: 610px) {
+  .logo-icon {
+    height: 32px;
+  }
+}
+
+.logo-icon img {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+}
+
+.logo-full {
+  display: none;
+}
+
+@media (min-width: 610px) {
+  .logo-full {
+    display: block;
+  }
+
+  .logo-mobile {
+    display: none;
+  }
 }
 
 /* Hero Section */
@@ -307,7 +337,7 @@ body {
   margin: 0 auto;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .hero {
     padding: 3rem 1.5rem 2rem;
   }
@@ -475,7 +505,7 @@ body {
   display: none;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .floating-sidebar {
     left: 1.5rem;
     top: 50%;
@@ -541,6 +571,7 @@ body {
 
 .canvas-container {
   flex: 1;
+  flex-shrink: 0;
   position: relative;
   background-color: var(--bg-tertiary);
   overflow: hidden;
@@ -554,6 +585,7 @@ body {
 
 .canvas-wrapper {
   position: relative;
+  flex-shrink: 0;
   background-color: white;
   cursor: crosshair;
   width: 100%;

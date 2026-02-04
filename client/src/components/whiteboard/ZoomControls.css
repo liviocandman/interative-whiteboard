@@ -23,7 +23,7 @@
 }
 
 /* Mobile adjustments */
-@media (max-width: 420px) {
+@media (max-width: 610px) {
   .zoom-controls-overlay {
     top: 1rem;
     right: 1rem;

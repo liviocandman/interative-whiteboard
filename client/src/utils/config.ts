@@ -18,6 +18,7 @@ export function getBackendUrl(): string {
         return envUrl;
       }
     } catch {
+      console.error('Invalid backend URL');
     }
   }
   return `${window.location.protocol}//${currentHost}:${port}`;

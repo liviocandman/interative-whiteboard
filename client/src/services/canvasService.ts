@@ -176,20 +176,25 @@ class CanvasService {
   }
 
   resizeCanvas(canvas: HTMLCanvasElement): void {
-    const rect = canvas.getBoundingClientRect();
+    // Get the actual size we want the canvas to be
+    // Using parentElement ensures we fill the container even if the canvas was previously small
+    const container = canvas.parentElement || canvas;
+    const rect = container.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
 
-    // Set actual size in memory
+    // Set actual size in memory (buffer)
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
 
-    // Scale canvas back down using CSS
+    // Scale canvas back down using CSS to match logical pixels
+    // We set it to the container's physical width to ensure perfect pixel alignment
     canvas.style.width = rect.width + 'px';
     canvas.style.height = rect.height + 'px';
 
     // Scale context to ensure correct drawing operations
     const ctx = canvas.getContext('2d');
     if (ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transformations before scaling
       ctx.scale(dpr, dpr);
       this.setupCanvasDefaults(ctx);
     }
@@ -204,25 +209,32 @@ class CanvasService {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
-  restoreCanvasState(canvas: HTMLCanvasElement, state: CanvasState, view?: ViewConfig): void {
+  async restoreCanvasState(canvas: HTMLCanvasElement, state: CanvasState, view?: ViewConfig): Promise<void> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     this.clearCanvas(canvas);
     this.clearWorldRaster();
 
+    // CRITICAL: Ensure world raster is synced FIRST so that bucket fills have boundaries.
+    // The ensureWorldRaster handles fills sequentially in the world buffer.
+    await this.ensureWorldRaster(state.strokes);
+
     // Restaura snapshot se existir
     if (state.snapshot) {
       const img = new Image();
-      img.onload = (): void => {
-        ctx.drawImage(img, 0, 0);
-        // Aplica strokes sobre o snapshot
-        this.applyStrokes(canvas, state.strokes, view);
-      };
-      img.src = state.snapshot;
+      return new Promise((resolve) => {
+        img.onload = async (): Promise<void> => {
+          ctx.drawImage(img, 0, 0);
+          // Aplica strokes sobre o snapshot
+          await this.applyStrokes(canvas, state.strokes, view);
+          resolve();
+        };
+        img.src = state.snapshot!;
+      });
     } else {
       // Apenas aplica os strokes
-      this.applyStrokes(canvas, state.strokes, view);
+      await this.applyStrokes(canvas, state.strokes, view);
     }
   }
 
@@ -233,6 +245,8 @@ class CanvasService {
    */
   async redrawFromStrokes(canvas: HTMLCanvasElement, strokes: Stroke[], view?: ViewConfig): Promise<void> {
     this.clearCanvas(canvas);
+    // CRITICAL: Ensure world raster is synced for historical fills (undo/redo)
+    await this.ensureWorldRaster(strokes);
     await this.applyStrokes(canvas, strokes, view);
   }
 

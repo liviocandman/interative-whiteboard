@@ -34,8 +34,20 @@ export function Whiteboard({
 
 
   useEffect(() => {
-    // Previne scroll em dispositivos móveis
-    const preventDefault = (e: Event) => e.preventDefault();
+    // Previne scroll em dispositivos móveis, exceto na barra lateral
+    const preventDefault = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      // Permite que eventos de toque funcionem nos containers da barra lateral
+      if (
+        target.closest('.floating-sidebar') ||
+        target.closest('.sidebar-content') ||
+        target.closest('.stroke-width-popover') ||
+        target.closest('.color-picker-popover')
+      ) {
+        return;
+      }
+      e.preventDefault();
+    };
 
     document.addEventListener('touchstart', preventDefault, { passive: false });
     document.addEventListener('touchend', preventDefault, { passive: false });

@@ -406,7 +406,7 @@ export function useWhiteboard({
 
       // Draw live segment directly (no full history scan or group redraw)
       // The background raster will be updated in handleDrawingBatch or on zoom events.
-      drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
+      await drawingService.applyStroke(canvasRef.current, stroke, viewConfigRef.current);
     };
 
     const handleDrawingBatch = async (batch: Stroke[]): Promise<void> => {
@@ -441,7 +441,7 @@ export function useWhiteboard({
       canvasService.applyStrokes(canvasRef.current, remoteBatch, viewConfigRef.current);
     };
 
-    const handleInitialState = (state: CanvasState): void => {
+    const handleInitialState = async (state: CanvasState): Promise<void> => {
       if (!canvasRef.current) return;
       console.log('[useWhiteboard] Received initialState, restoring canvas...');
 
@@ -453,7 +453,9 @@ export function useWhiteboard({
       // Ensure initial state strokes are sorted (they should be, but let's be safe)
       const sortedStrokes = [...state.strokes].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
       localStrokes.current = sortedStrokes;
-      canvasService.restoreCanvasState(canvasRef.current, { ...state, strokes: sortedStrokes }, viewConfigRef.current);
+
+      // We pass the full state but ensure strokes are sorted
+      await canvasService.restoreCanvasState(canvasRef.current, { ...state, strokes: sortedStrokes }, viewConfigRef.current);
     };
 
     const handleStrokeRemoved = async (data: { strokeId: string; userId: string }): Promise<void> => {
@@ -483,7 +485,7 @@ export function useWhiteboard({
 
       // Apply each stroke to canvas
       await canvasService.ensureWorldRaster(localStrokes.current);
-      canvasService.applyStrokes(canvasRef.current, data.strokes, viewConfigRef.current);
+      await canvasService.applyStrokes(canvasRef.current, data.strokes, viewConfigRef.current);
       console.log('[useWhiteboard] Strokes applied after redo');
     };
 
@@ -556,7 +558,7 @@ export function useWhiteboard({
   }, [canvasRef]);
 
   // Optimistic undo - apply locally first, then sync with server
-  const undo = useCallback((): void => {
+  const undo = useCallback(async (): Promise<void> => {
     // Debounce: prevent rapid clicks
     const now = Date.now();
     if (now - lastUndoTime.current < UNDO_REDO_DEBOUNCE_MS) {
@@ -598,7 +600,7 @@ export function useWhiteboard({
     }
 
     // INSTANT: Redraw canvas immediately
-    canvasService.redrawFromStrokes(canvasRef.current, localStrokes.current, viewConfigRef.current);
+    await canvasService.redrawFromStrokes(canvasRef.current, localStrokes.current, viewConfigRef.current);
     console.log('[useWhiteboard] Optimistic undo applied locally');
 
     // Sync with server in background (don't wait for response)
@@ -612,7 +614,7 @@ export function useWhiteboard({
   }, [canvasRef]);
 
   // Optimistic redo - apply locally first from client stack, then sync with server
-  const redo = useCallback((): void => {
+  const redo = useCallback(async (): Promise<void> => {
     // Debounce: prevent rapid clicks
     const now = Date.now();
     if (now - lastRedoTime.current < UNDO_REDO_DEBOUNCE_MS) {
@@ -634,7 +636,7 @@ export function useWhiteboard({
     localStrokes.current.push(...undoneGroup.strokes);
 
     // INSTANT: Apply the stroke group immediately
-    canvasService.applyStrokes(canvasRef.current, undoneGroup.strokes, viewConfigRef.current);
+    await canvasService.applyStrokes(canvasRef.current, undoneGroup.strokes, viewConfigRef.current);
     console.log('[useWhiteboard] Optimistic redo applied locally');
 
     // Sync with server in background (don't wait for response)

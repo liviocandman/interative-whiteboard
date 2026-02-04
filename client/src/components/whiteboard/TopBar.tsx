@@ -32,9 +32,9 @@ export function TopBar({
       <div className="top-bar__left">
         <Link to="/" className="logo-container" title="Voltar para a Home">
           <div className="logo-icon">
-            <Icons.Grid />
+            <img src="/logo.png" alt="Scribo Logo" className="logo-full" />
+            <img src="/logo1.png" alt="Scribo" className="logo-mobile" />
           </div>
-          <span className="logo-text">Whiteboard</span>
         </Link>
         <div className="room-info">
           <div className="room-info__content">
@@ -78,9 +78,6 @@ export function TopBar({
             style={!canExport ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
           >
             <Icons.Download />
-          </button>
-          <button className="btn btn-primary text-small">
-            <span className="hidden-mobile">Compartilhar</span>
           </button>
         </div>
       </div>

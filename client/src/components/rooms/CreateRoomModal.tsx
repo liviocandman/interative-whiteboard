@@ -28,21 +28,7 @@ const POPULAR_TAGS = [
   'colaboração', 'prototipo', 'workshop', 'apresentação', 'rápida'
 ];
 
-const CANVAS_SIZES = [
-  { value: 'small', label: 'Pequeno (800x600)', icon: '📱' },
-  { value: 'medium', label: 'Médio (1200x800)', icon: '💻' },
-  { value: 'large', label: 'Grande (1920x1080)', icon: '🖥️' },
-  { value: 'custom', label: 'Personalizado', icon: '⚙️' },
-] as const;
 
-const BACKGROUND_COLORS = [
-  { value: '#ffffff', label: 'Branco', preview: '#ffffff' },
-  { value: '#f8fafc', label: 'Cinza Claro', preview: '#f8fafc' },
-  { value: '#fef3c7', label: 'Amarelo Claro', preview: '#fef3c7' },
-  { value: '#dbeafe', label: 'Azul Claro', preview: '#dbeafe' },
-  { value: '#dcfce7', label: 'Verde Claro', preview: '#dcfce7' },
-  { value: '#fce7f3', label: 'Rosa Claro', preview: '#fce7f3' },
-];
 
 export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps): ReactElement {
   const [formData, setFormData] = useState<CreateRoomData>({
@@ -55,7 +41,6 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
     settings: DEFAULT_SETTINGS,
   });
 
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -86,14 +71,6 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
       newErrors.maxUsers = 'Número de usuários deve estar entre 1 e 50';
     }
 
-    if (formData.settings.canvasSize === 'custom') {
-      if (!formData.settings.customWidth || formData.settings.customWidth < 400) {
-        newErrors.customWidth = 'Largura mínima é 400px';
-      }
-      if (!formData.settings.customHeight || formData.settings.customHeight < 300) {
-        newErrors.customHeight = 'Altura mínima é 300px';
-      }
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -122,12 +99,6 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
     }
   };
 
-  const updateSettings = (updates: Partial<RoomSettings>): void => {
-    setFormData(prev => ({
-      ...prev,
-      settings: { ...prev.settings, ...updates }
-    }));
-  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -238,148 +209,6 @@ export function CreateRoomModal({ onCreateRoom, onClose }: CreateRoomModalProps)
               </FormField>
             </div>
 
-            {/* Advanced Settings */}
-            <div className="form-section">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="advanced-toggle"
-              >
-                <span>⚙️ Configurações Avançadas</span>
-                <span className={`arrow ${showAdvanced ? 'up' : 'down'}`}>▼</span>
-              </button>
-
-              {showAdvanced && (
-                <div className="advanced-settings">
-                  <div className="settings-grid">
-                    <div className="setting-group">
-                      <h4>Permissões</h4>
-
-                      <Toggle
-                        checked={formData.settings.allowDrawing}
-                        onChange={(allowDrawing) => updateSettings({ allowDrawing })}
-                        label="✏️ Permitir desenho"
-                      />
-
-                      <Toggle
-                        checked={formData.settings.allowChat}
-                        onChange={(allowChat) => updateSettings({ allowChat })}
-                        label="💬 Habilitar chat"
-                      />
-
-                      <Toggle
-                        checked={formData.settings.allowExport}
-                        onChange={(allowExport) => updateSettings({ allowExport })}
-                        label="💾 Permitir export"
-                      />
-
-                      <Toggle
-                        checked={formData.settings.requireApproval}
-                        onChange={(requireApproval) => updateSettings({ requireApproval })}
-                        label="✋ Requer aprovação para entrar"
-                      />
-                    </div>
-
-                    <div className="setting-group">
-                      <h4>Canvas</h4>
-
-                      <FormField label="Tamanho do Canvas" icon="📐">
-                        <select
-                          value={formData.settings.canvasSize}
-                          onChange={(e) => updateSettings({
-                            canvasSize: e.target.value as RoomSettings['canvasSize']
-                          })}
-                        >
-                          {CANVAS_SIZES.map(size => (
-                            <option key={size.value} value={size.value}>
-                              {size.icon} {size.label}
-                            </option>
-                          ))}
-                        </select>
-                      </FormField>
-
-                      {formData.settings.canvasSize === 'custom' && (
-                        <div className="custom-size-inputs">
-                          <FormField label="Largura (px)" error={errors.customWidth}>
-                            <input
-                              type="number"
-                              value={formData.settings.customWidth || ''}
-                              onChange={(e) => updateSettings({
-                                customWidth: Number(e.target.value)
-                              })}
-                              min={400}
-                              placeholder="1200"
-                            />
-                          </FormField>
-
-                          <FormField label="Altura (px)" error={errors.customHeight}>
-                            <input
-                              type="number"
-                              value={formData.settings.customHeight || ''}
-                              onChange={(e) => updateSettings({
-                                customHeight: Number(e.target.value)
-                              })}
-                              min={300}
-                              placeholder="800"
-                            />
-                          </FormField>
-                        </div>
-                      )}
-
-                      <FormField label="Cor de Fundo" icon="🎨">
-                        <div className="color-picker-grid">
-                          {BACKGROUND_COLORS.map(color => (
-                            <button
-                              key={color.value}
-                              type="button"
-                              onClick={() => updateSettings({ backgroundColor: color.value })}
-                              className={`color-option ${formData.settings.backgroundColor === color.value ? 'selected' : ''
-                                }`}
-                              style={{ backgroundColor: color.preview }}
-                              title={color.label}
-                            />
-                          ))}
-                        </div>
-                      </FormField>
-                    </div>
-
-                    <div className="setting-group">
-                      <h4>Recursos</h4>
-
-                      <Toggle
-                        checked={formData.settings.enableGrid}
-                        onChange={(enableGrid) => updateSettings({ enableGrid })}
-                        label="⊞ Mostrar grade"
-                      />
-
-                      <Toggle
-                        checked={formData.settings.enableRulers}
-                        onChange={(enableRulers) => updateSettings({ enableRulers })}
-                        label="📏 Mostrar réguas"
-                      />
-
-                      <Toggle
-                        checked={formData.settings.autoSave}
-                        onChange={(autoSave) => updateSettings({ autoSave })}
-                        label="💾 Salvamento automático"
-                      />
-
-                      <FormField label="Limite do Histórico" icon="📚">
-                        <input
-                          type="number"
-                          value={formData.settings.historyLimit}
-                          onChange={(e) => updateSettings({
-                            historyLimit: Number(e.target.value)
-                          })}
-                          min={5}
-                          max={100}
-                        />
-                      </FormField>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
 
           {errors.submit && (

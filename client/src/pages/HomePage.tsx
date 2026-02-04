@@ -94,11 +94,9 @@ export function HomePage(): ReactElement {
       {/* Navbar */}
       <nav className="navbar">
         <div className="navbar-content">
-          <div className="logo-container">
-            <div className="logo-icon">
-              <Icons.Grid className="w-5 h-5" />
-            </div>
-            <span className="text-headline tracking-tight">Scribo.io</span>
+          <div className="logo-icon">
+            <img src="/logo.png" alt="Scribo Logo" className="logo-full" />
+            <img src="/logo1.png" alt="Scribo" className="logo-mobile" />
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -116,18 +114,18 @@ export function HomePage(): ReactElement {
             </button>
           </div>
         </div>
-      </nav>
+      </nav >
 
       {/* Hero Section */}
-      <div className="hero">
+      < div className="hero" >
         <h1 className="text-h1">Colaboração simplificada.</h1>
         <p className="text-body">
           Crie, desenhe e conecte ideias agora. Solução completa para idealizar, desenhar e compartilhar ideias em tempo real.
         </p>
-      </div>
+      </div >
 
       {/* Main Content */}
-      <main className="main-container">
+      < main className="main-container" >
         <div className="card">
 
           {/* Toolbar */}
@@ -195,26 +193,30 @@ export function HomePage(): ReactElement {
             )}
           </div>
         </div>
-      </main>
+      </main >
 
       {/* Modals */}
-      {showCreateModal && (
-        <CreateRoomModal
-          onCreateRoom={handleCreateRoom}
-          onClose={() => setShowCreateModal(false)}
-        />
-      )}
+      {
+        showCreateModal && (
+          <CreateRoomModal
+            onCreateRoom={handleCreateRoom}
+            onClose={() => setShowCreateModal(false)}
+          />
+        )
+      }
 
-      {showJoinModal && (
-        <JoinRoomModal
-          room={selectedRoom}
-          onJoinRoom={handleJoinRoom}
-          onClose={() => {
-            setShowJoinModal(false);
-            setSelectedRoom(null);
-          }}
-        />
-      )}
-    </div>
+      {
+        showJoinModal && (
+          <JoinRoomModal
+            room={selectedRoom}
+            onJoinRoom={handleJoinRoom}
+            onClose={() => {
+              setShowJoinModal(false);
+              setSelectedRoom(null);
+            }}
+          />
+        )
+      }
+    </div >
   );
 }

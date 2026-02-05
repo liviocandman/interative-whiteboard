@@ -42,7 +42,12 @@ export function Whiteboard({
         target.closest('.floating-sidebar') ||
         target.closest('.sidebar-content') ||
         target.closest('.stroke-width-popover') ||
-        target.closest('.color-picker-popover')
+        target.closest('.color-picker-popover') ||
+        target.closest('.top-bar') ||
+        target.closest('.navbar') ||
+        target.closest('.btn') ||
+        target.closest('button') ||
+        target.closest('a')
       ) {
         return;
       }

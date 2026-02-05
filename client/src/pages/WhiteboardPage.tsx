@@ -4,6 +4,7 @@ import { useUsers } from "../hooks/useUsers";
 import { UserSetup } from "../components/users/UserSetup";
 import { WhiteboardContainer } from "../components/whiteboard/WhiteboardContainer";
 import { roomService } from "../services/roomService";
+import './WhiteboardPage.css';
 import type { Room } from "../types/room";
 
 export function WhiteboardPage() {
@@ -51,26 +52,10 @@ export function WhiteboardPage() {
   // Show loading state while fetching room
   if (isLoadingRoom) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        backgroundColor: 'var(--bg-primary)',
-        color: 'var(--text-primary)',
-        gap: '1rem'
-      }}>
-        <div style={{
-          width: '40px',
-          height: '40px',
-          border: '4px solid var(--primary-color)',
-          borderTopColor: 'transparent',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
-        }} />
-        <p style={{ fontSize: '1rem', fontWeight: 500 }}>Loading room settings...</p>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Room: {roomId}</p>
+      <div className="loading-room-container">
+        <div className="loading-room-spinner" />
+        <p className="loading-room-title">Loading room settings...</p>
+        <p className="loading-room-subtitle">Room: {roomId}</p>
       </div>
     );
   }

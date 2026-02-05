@@ -33,7 +33,7 @@ export function TopBar({
         <Link to="/" className="logo-container" title="Voltar para a Home">
           <div className="logo-icon">
             <img src="/logo.png" alt="Scribo Logo" className="logo-full" />
-            <img src="/logo1.png" alt="Scribo" className="logo-mobile" />
+            <img src="/icon-logo.png" alt="Scribo" className="logo-mobile" />
           </div>
         </Link>
         <div className="room-info">

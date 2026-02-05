@@ -1,5 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { Button } from '../ui/Button';
+import './UserSetup.css';
 
 interface UserSetupProps {
   onSetup: (name: string, color: string) => void;
@@ -35,19 +36,19 @@ export function UserSetup({ onSetup }: UserSetupProps): ReactElement {
   return (
     <div className="user-setup-overlay">
       <div className="user-setup-modal">
-        <div className="text-center mb-2">
-          <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-sm">
+        <div className="setup-header">
+          <div className="welcome-emoji">
             👋
           </div>
           <h2>Bem-vindo!</h2>
-          <p className="text-[var(--text-secondary)] text-sm mt-2">
+          <p className="text-secondary text-sm mt-2">
             Configure seu perfil para começar a colaborar.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+        <form onSubmit={handleSubmit} className="setup-form">
           <div className="form-group">
-            <label htmlFor="userName" className="field-label mb-2">Seu nome</label>
+            <label htmlFor="userName" className="field-label">Seu nome</label>
             <div className="name-input-group">
               <input
                 id="userName"
@@ -57,7 +58,7 @@ export function UserSetup({ onSetup }: UserSetupProps): ReactElement {
                 placeholder="Como você quer ser chamado?"
                 maxLength={20}
                 autoFocus
-                className="flex-1"
+                className="name-input"
               />
               <Button type="button" onClick={generateRandomName} variant="default" title="Gerar nome aleatório">
                 🎲
@@ -66,7 +67,7 @@ export function UserSetup({ onSetup }: UserSetupProps): ReactElement {
           </div>
 
           <div className="form-group">
-            <label className="field-label mb-2">Sua cor</label>
+            <label className="field-label">Sua cor</label>
             <div className="color-grid">
               {PRESET_COLORS.map((color) => (
                 <button
@@ -81,8 +82,8 @@ export function UserSetup({ onSetup }: UserSetupProps): ReactElement {
             </div>
           </div>
 
-          <div className="form-actions">
-            <Button type="submit" variant="active" disabled={!name.trim()} className="w-full justify-center py-3">
+          <div className="setup-footer">
+            <Button type="submit" variant="active" disabled={!name.trim()} className="btn-full">
               Entrar no Whiteboard
             </Button>
           </div>

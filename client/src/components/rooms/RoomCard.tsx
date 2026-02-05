@@ -1,5 +1,6 @@
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import './RoomCard.css';
 import type { Room } from '../../types/room';
 
 interface RoomCardProps {
@@ -137,7 +138,7 @@ export function RoomCard({ room, viewMode, onJoin, onDelete, onPreview }: RoomCa
       <div className="room-footer">
         <button
           onClick={onJoin}
-          className="btn btn-primary w-full justify-center"
+          className="btn btn-primary room-join-btn"
           disabled={room.currentUsers >= room.maxUsers}
         >
           {room.currentUsers >= room.maxUsers ? (

@@ -2,6 +2,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Room } from '../../types/room';
 import type { ReactElement } from 'react';
+import './RoomPreview.css';
 
 interface RoomPreviewProps {
   room: Room;

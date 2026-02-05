@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 import { RoomBrowser } from '../components/rooms/RoomBrowser';
 import { CreateRoomModal } from '../components/rooms/CreateRoomModal';
 import { JoinRoomModal } from '../components/rooms/JoinRoomModal';
 import { useRooms } from '../hooks/useRooms';
 import type { Room, RoomFilter, CreateRoomData, JoinRoomData } from '../types/room';
 import { Icons } from '../components/ui/Icons';
+import './HomePage.css';
 
 export function HomePage(): ReactElement {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -90,15 +92,16 @@ export function HomePage(): ReactElement {
   });
 
   return (
-    <div className="home-page min-h-screen text-[var(--text-primary)] font-sans">
+    <div className="home-page">
       {/* Navbar */}
       <nav className="navbar">
         <div className="navbar-content">
-          <div className="logo-icon">
-            <img src="/logo.png" alt="Scribo Logo" className="logo-full" />
-            <img src="/logo1.png" alt="Scribo" className="logo-mobile" />
-          </div>
-          <div className="flex items-center gap-4">
+          <Link to="/" className="logo-container">
+            <div className="logo-icon">
+              <img src="/logo.png" alt="Scribo Logo" className="logo-full" />
+            </div>
+          </Link>
+          <div className="nav-actions">
             <button
               onClick={() => setShowJoinModal(true)}
               className="btn btn-ghost text-small"
@@ -109,7 +112,7 @@ export function HomePage(): ReactElement {
               onClick={() => setShowCreateModal(true)}
               className="btn btn-primary text-small"
             >
-              <Icons.Plus className="w-4 h-4" />
+              <Icons.Plus className="icon-sm" />
               Nova Sala
             </button>
           </div>
@@ -130,17 +133,17 @@ export function HomePage(): ReactElement {
 
           {/* Toolbar */}
           <div className="toolbar">
-            <div className="flex items-center gap-4">
+            <div className="recent-rooms-header">
               <h2 className="text-headline">Salas Recentes</h2>
-              <span className="bg-[var(--bg-secondary)] px-2 py-1 rounded-full text-small text-[var(--text-secondary)]">
+              <span className="rooms-count-badge">
                 {filteredRooms.length}
               </span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="toolbar-actions">
               <div className="search-input-wrapper">
                 <div className="search-icon">
-                  <Icons.Search className="w-4 h-4" />
+                  <Icons.Search className="icon-sm" />
                 </div>
                 <input
                   type="text"
@@ -156,16 +159,16 @@ export function HomePage(): ReactElement {
           {/* Room List */}
           <div className="room-list-container">
             {error ? (
-              <div className="empty-state text-red-500">
+              <div className="error-state">
                 <p>Erro ao carregar salas: {error}</p>
-                <button onClick={refreshRooms} className="btn btn-ghost text-[var(--accent-blue)]">
+                <button onClick={refreshRooms} className="btn btn-ghost">
                   Tentar novamente
                 </button>
               </div>
             ) : isLoading ? (
-              <div className="empty-state">
-                <div className="animate-spin mb-4">
-                  <Icons.Grid className="w-8 h-8 opacity-50" />
+              <div className="loading-spinner-wrapper">
+                <div className="spinner-icon">
+                  <Icons.Grid className="icon-lg" />
                 </div>
                 <p>Carregando...</p>
               </div>
@@ -177,15 +180,15 @@ export function HomePage(): ReactElement {
                 emptyState={null}
               />
             ) : (
-              <div className="empty-state">
-                <div className="empty-icon">
-                  <Icons.Grid className="w-8 h-8" />
+              <div className="empty-state-search">
+                <div className="empty-icon-wrapper">
+                  <Icons.Grid className="icon-lg" />
                 </div>
-                <h3 className="text-headline text-[var(--text-primary)] mb-2">Nenhuma sala encontrada</h3>
+                <h3 className="text-headline text-primary mb-2">Nenhuma sala encontrada</h3>
                 <p className="text-body mb-6">Comece criando uma nova sala para colaborar.</p>
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="btn btn-ghost text-[var(--accent-blue)]"
+                  className="btn btn-ghost"
                 >
                   Criar sala agora
                 </button>

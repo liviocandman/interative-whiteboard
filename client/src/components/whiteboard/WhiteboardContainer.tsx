@@ -144,14 +144,7 @@ export function WhiteboardContainer({
     <div className="whiteboard-layout">
       {/* Error banner if room fetch failed */}
       {roomError && (
-        <div style={{
-          padding: '0.75rem 1rem',
-          backgroundColor: '#fef3c7',
-          color: '#92400e',
-          borderBottom: '1px solid #fcd34d',
-          fontSize: '0.875rem',
-          textAlign: 'center'
-        }}>
+        <div className="error-banner">
           ⚠️ {roomError} - Using default settings
         </div>
       )}
